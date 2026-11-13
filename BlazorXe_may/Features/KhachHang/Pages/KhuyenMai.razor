@@ -1,0 +1,79 @@
+@page "/khuyen-mai"
+@using BlazorXe_Xemay.Features.Shared
+@using PromotionEntity = BlazorXe_Xemay.Features.TaiKhoan.KhuyenMai
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Ưu đãi - MotoHub</PageTitle>
+
+<section class="content-masthead">
+    <span class="showroom-eyebrow">MOTOHUB PRIVILEGES</span>
+    <h1>Đặc quyền<br /><em>cho hành trình mới.</em></h1>
+    <p>Chọn ưu đãi phù hợp, nhập mã tại bước thanh toán và xem số tiền giảm trước khi xác nhận đơn.</p>
+</section>
+
+<section class="content-section">
+    <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+        <div><span class="showroom-eyebrow">ƯU ĐÃI ĐANG MỞ</span><h2 class="h3 mb-0">Mã dành cho bạn</h2></div>
+        <span class="text-secondary small">Cập nhật @DateTime.Now.ToString("dd/MM/yyyy")</span>
+    </div>
+    @if (DangTai)
+    {
+        <div class="alert alert-light">Đang tải ưu đãi...</div>
+    }
+    else if (KhuyenMais.Count == 0)
+    {
+        <div class="card card-body"><h3 class="h5">Chưa có mã đang áp dụng</h3><p class="mb-0">MotoHub sẽ đăng ưu đãi mới tại đây. Bạn vẫn có thể xem bộ sưu tập xe và nhận tư vấn tại showroom.</p></div>
+    }
+    else
+    {
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+            @foreach (var promotion in KhuyenMais)
+            {
+                <div class="col">
+                    <article class="offer-card h-100">
+                        <div class="offer-card__top"><span>ƯU ĐÃI MOTOHUB</span><span aria-hidden="true">✦</span></div>
+                        <div class="offer-card__body">
+                            <span class="offer-code">@promotion.MaKhuyenMai</span>
+                            <h2>@promotion.TenKhuyenMai</h2>
+                            <strong class="offer-value">@(promotion.TheoPhanTram ? $"Giảm {promotion.GiaTri:N0}%" : $"Giảm {promotion.GiaTri:N0} ₫")</strong>
+                            <p>Áp dụng cho đơn từ <b>@promotion.DonToiThieu.ToString("N0") ₫</b>.</p>
+                            <p class="small text-secondary">Hiệu lực đến @promotion.KetThuc.ToLocalTime().ToString("dd/MM/yyyy").</p>
+                            <a class="btn btn-outline-dark" href="/san-pham">Chọn xe phù hợp <span aria-hidden="true">↗</span></a>
+                        </div>
+                    </article>
+                </div>
+            }
+        </div>
+    }
+</section>
+
+<section class="offer-howto">
+    <span class="showroom-eyebrow">CÁCH SỬ DỤNG</span>
+    <div class="offer-howto__steps">
+        <div><b>01</b><h3>Chọn xe</h3><p>Thêm mẫu xe muốn mua vào giỏ hàng.</p></div>
+        <div><b>02</b><h3>Nhập mã</h3><p>Điền mã ưu đãi tại bước thanh toán rồi nhấn “Áp dụng”.</p></div>
+        <div><b>03</b><h3>Xác nhận</h3><p>Kiểm tra khoản giảm và tổng tiền trước khi đặt hàng.</p></div>
+    </div>
+    <a href="/gio-hang" class="showroom-cta">Đến giỏ hàng <span aria-hidden="true">↗</span></a>
+</section>
+
+@code {
+    private List<PromotionEntity> KhuyenMais { get; set; } = [];
+    private bool DangTai { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var now = DateTime.UtcNow;
+            KhuyenMais = await db.KhuyenMais.AsNoTracking()
+                .Where(x => x.DangHoatDong && x.BatDau <= now && x.KetThuc >= now)
+                .OrderBy(x => x.KetThuc).ToListAsync();
+        }
+        finally
+        {
+            DangTai = false;
+        }
+    }
+}

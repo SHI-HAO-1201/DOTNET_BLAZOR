@@ -1,0 +1,77 @@
+@page "/so-sanh"
+@using BlazorXe_Xemay.Features.XeMay.Models
+@using BlazorXe_Xemay.Features.XeMay.Services
+@inject SoSanhXeService SoSanh
+@inject XeMayService XeMayService
+@implements IDisposable
+
+<PageTitle>So sánh xe máy - MotoHub</PageTitle>
+<h1 class="h2 mb-4">So sánh xe</h1>
+@if (DanhSachXe.Count == 0)
+{
+    <div class="alert alert-light">Chưa có xe để so sánh. Hãy chọn mẫu xe từ <a href="/san-pham">danh mục xe</a>.</div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-bordered align-middle bg-white">
+            <thead class="table-light">
+                <tr>
+                    <th>Thông số</th>
+                    @foreach (var xe in DanhSachXe)
+                    {
+                        <th>
+                            @xe.TenXe
+                            <button class="btn btn-sm btn-link text-danger" @onclick="() => Xoa(xe.Id)">Bỏ</button>
+                        </th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                <tr><th>Hãng</th>@foreach (var xe in DanhSachXe) { <td>@xe.HangXe</td> }</tr>
+                <tr><th>Loại xe</th>@foreach (var xe in DanhSachXe) { <td>@xe.LoaiXe</td> }</tr>
+                <tr><th>Giá bán</th>@foreach (var xe in DanhSachXe) { <td>@xe.GiaBan.ToString("N0") ₫</td> }</tr>
+                <tr><th>Phân khối</th>@foreach (var xe in DanhSachXe) { <td>@(xe.PhanKho?.ToString() ?? "—") cc</td> }</tr>
+                <tr><th>Nhiên liệu</th>@foreach (var xe in DanhSachXe) { <td>@xe.NhienLieu</td> }</tr>
+                <tr><th>Tồn kho</th>@foreach (var xe in DanhSachXe) { <td>@xe.SoLuong</td> }</tr>
+                <tr><th>Bảo hành</th>@foreach (var xe in DanhSachXe) { <td>@xe.BaoHanhThang tháng</td> }</tr>
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<XeMayModel> DanhSachXe { get; set; } = [];
+
+    protected override void OnInitialized() => SoSanh.Changed += OnChanged;
+
+    protected override Task OnParametersSetAsync() => TaiDuLieuAsync();
+
+    private async Task TaiDuLieuAsync()
+    {
+        var products = new List<XeMayModel>();
+        foreach (var id in SoSanh.ProductIds)
+        {
+            var xe = await XeMayService.LayTheoIdAsync(id);
+            if (xe is { DangKinhDoanh: true })
+            {
+                products.Add(xe);
+            }
+        }
+
+        DanhSachXe = products;
+    }
+
+    private void Xoa(int id) => SoSanh.Xoa(id);
+
+    private async void OnChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            await TaiDuLieuAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => SoSanh.Changed -= OnChanged;
+}

@@ -1,0 +1,211 @@
+@page "/thanh-toan"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "User")]
+@using System.ComponentModel.DataAnnotations
+@using BlazorXe_Xemay.Features.Shared
+@using BlazorXe_Xemay.Features.TaiKhoan
+@inject GioHangService GioHang
+@inject DichVuDonHang DichVuDonHang
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<AppUser> UserManager
+@inject NavigationManager Navigation
+@inject ILogger<ThanhToan> Logger
+
+<PageTitle>Đặt hàng - MotoHub</PageTitle>
+<h1 class="h2 mb-4">Thông tin nhận xe</h1>
+
+@if (!string.IsNullOrWhiteSpace(ThongBaoLoi))
+{
+    <div class="alert alert-danger" role="alert">@ThongBaoLoi</div>
+}
+@if (DonHangId is not null)
+{
+    <div class="alert alert-success" role="status">
+        Đã đặt hàng thành công. Mã đơn: <strong>@DonHangId</strong>. Bạn sẽ thanh toán khi nhận xe.
+        <a href="/don-hang" class="alert-link">Theo dõi đơn hàng</a>
+    </div>
+}
+else if (GioHang.Items.Count == 0)
+{
+    <div class="alert alert-warning">Giỏ hàng của bạn đang trống. <a href="/san-pham">Chọn xe để đặt hàng</a></div>
+}
+else
+{
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <EditForm Model="ThongTin" OnValidSubmit="DatHangAsync" class="card border-0 shadow-sm p-4">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="text-danger" />
+                <label class="form-label" for="recipient">Người nhận</label>
+                <InputText id="recipient" class="form-control mb-3" @bind-Value="ThongTin.NguoiNhan" />
+                <label class="form-label" for="phone">Số điện thoại</label>
+                <InputText id="phone" class="form-control mb-3" @bind-Value="ThongTin.SoDienThoai" />
+                <label class="form-label" for="address">Địa chỉ giao nhận</label>
+                <InputTextArea id="address" class="form-control mb-3" @bind-Value="ThongTin.DiaChi" />
+                <label class="form-label" for="branch">Nhận xe tại chi nhánh</label>
+                <InputSelect id="branch" class="form-select mb-3" @bind-Value="ThongTin.ChiNhanhId">
+                    <option value="0">Chọn chi nhánh</option>
+                    @foreach (var branch in ChiNhanhs)
+                    {
+                        <option value="@branch.Id">@branch.TenChiNhanh</option>
+                    }
+                </InputSelect>
+                <label class="form-label" for="promotion">Mã khuyến mãi (nếu có)</label>
+                <div class="input-group mb-2">
+                    <InputText id="promotion" class="form-control" @bind-Value="ThongTin.MaKhuyenMai" @bind-Value:after="XoaKetQuaMa" placeholder="Nhập mã ưu đãi" />
+                    <button class="btn btn-outline-dark" type="button" @onclick="ApDungMaKhuyenMaiAsync" disabled="@(DangDatHang || DangKiemTraMa)">@(DangKiemTraMa ? "Đang kiểm tra..." : "Áp dụng")</button>
+                </div>
+                <a href="/khuyen-mai" class="small">Xem các mã ưu đãi đang có</a>
+                @if (KhuyenMaiDuocApDung is not null)
+                {
+                    <div class="alert alert-success mt-3 mb-3" role="status">
+                        <strong>@KhuyenMaiDuocApDung.TenChuongTrinh</strong>
+                        <span class="d-block">Tạm tính: @KhuyenMaiDuocApDung.TamTinh.ToString("N0") ₫ · Giảm: @KhuyenMaiDuocApDung.SoTienGiam.ToString("N0") ₫</span>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(ThongBaoMa))
+                {
+                    <div class="alert @(MaHopLe ? "alert-success" : "alert-warning") mt-3 mb-3" role="status">@ThongBaoMa</div>
+                }
+                <label class="form-label" for="notes">Ghi chú</label>
+                <InputTextArea id="notes" class="form-control mb-3" @bind-Value="ThongTin.GhiChu" />
+                <div class="form-check mb-4">
+                    <input class="form-check-input" type="checkbox" id="cod" checked disabled />
+                    <label class="form-check-label" for="cod">Thanh toán khi nhận xe (COD)</label>
+                </div>
+                <button class="btn btn-danger" type="submit" disabled="@DangDatHang">
+                    @(DangDatHang ? "Đang xử lý..." : "Xác nhận đặt hàng")
+                </button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly CheckoutForm ThongTin = new();
+    private string? ThongBaoLoi { get; set; }
+    private string? DonHangId { get; set; }
+    private bool DangDatHang { get; set; }
+    private bool DangKiemTraMa { get; set; }
+    private bool MaHopLe { get; set; }
+    private string? ThongBaoMa { get; set; }
+    private KhuyenMaiDuocApDung? KhuyenMaiDuocApDung { get; set; }
+    private List<ChiNhanh> ChiNhanhs { get; set; } = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            ChiNhanhs = await db.ChiNhanhs.AsNoTracking().Where(x => x.DangHoatDong)
+                .OrderBy(x => x.TenChiNhanh).ToListAsync();
+        }
+
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(state.User);
+        if (user is null)
+        {
+            Navigation.NavigateTo("/dang-nhap?returnUrl=%2Fthanh-toan", forceLoad: true);
+            return;
+        }
+
+        ThongTin.NguoiNhan = user.HoTen;
+        if (await UserManager.GetPhoneNumberAsync(user) is { } phone)
+        {
+            ThongTin.SoDienThoai = phone;
+        }
+    }
+
+    private async Task DatHangAsync()
+    {
+        DangDatHang = true;
+        ThongBaoLoi = null;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var order = await DichVuDonHang.DatHangAsync(
+                state.User,
+                GioHang.Items,
+                ThongTin.NguoiNhan,
+                ThongTin.SoDienThoai,
+                ThongTin.DiaChi,
+                ThongTin.GhiChu,
+                ThongTin.MaKhuyenMai,
+                ThongTin.ChiNhanhId);
+            DonHangId = order.MaDonHang;
+            GioHang.XoaTatCa();
+        }
+        catch (InvalidOperationException exception)
+        {
+            ThongBaoLoi = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Không thể tạo đơn hàng.");
+            ThongBaoLoi = "Không thể đặt hàng lúc này. Vui lòng thử lại sau.";
+        }
+        finally
+        {
+            DangDatHang = false;
+        }
+    }
+
+    private async Task ApDungMaKhuyenMaiAsync()
+    {
+        DangKiemTraMa = true;
+        MaHopLe = false;
+        ThongBaoMa = null;
+        KhuyenMaiDuocApDung = null;
+        try
+        {
+            KhuyenMaiDuocApDung = await DichVuDonHang.KiemTraMaKhuyenMaiAsync(GioHang.Items, ThongTin.MaKhuyenMai);
+            ThongTin.MaKhuyenMai = ThongTin.MaKhuyenMai.Trim().ToUpperInvariant();
+            MaHopLe = true;
+            ThongBaoMa = "Mã đã được áp dụng. Tổng giảm giá sẽ được xác nhận lại khi đặt hàng.";
+        }
+        catch (InvalidOperationException exception)
+        {
+            ThongBaoMa = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Không thể kiểm tra mã khuyến mãi.");
+            ThongBaoMa = "Không thể kiểm tra mã lúc này. Vui lòng thử lại.";
+        }
+        finally
+        {
+            DangKiemTraMa = false;
+        }
+    }
+
+    private void XoaKetQuaMa()
+    {
+        KhuyenMaiDuocApDung = null;
+        ThongBaoMa = null;
+        MaHopLe = false;
+    }
+
+    private sealed class CheckoutForm
+    {
+        [Required(ErrorMessage = "Vui lòng nhập tên người nhận.")]
+        [StringLength(80)]
+        public string NguoiNhan { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Vui lòng nhập số điện thoại.")]
+        [Phone(ErrorMessage = "Số điện thoại không hợp lệ.")]
+        [StringLength(32)]
+        public string SoDienThoai { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Vui lòng nhập địa chỉ nhận xe.")]
+        [StringLength(320)]
+        public string DiaChi { get; set; } = string.Empty;
+
+        [Range(1, int.MaxValue, ErrorMessage = "Vui lòng chọn chi nhánh nhận xe.")]
+        public int ChiNhanhId { get; set; }
+
+        [StringLength(500)]
+        public string GhiChu { get; set; } = string.Empty;
+
+        [StringLength(40)]
+        public string MaKhuyenMai { get; set; } = string.Empty;
+    }
+}

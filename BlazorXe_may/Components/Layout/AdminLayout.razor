@@ -1,0 +1,53 @@
+@inherits LayoutComponentBase
+
+<div class="admin-shell">
+    <aside class="admin-sidebar" aria-label="Điều hướng quản trị">
+        <a class="admin-brand" href="/admin" aria-label="MotoHub quản trị">
+            <span class="admin-brand__mark">M</span>
+            <span class="admin-brand__name">MOTO<span>HUB</span><small>RIDE BEYOND · QUẢN TRỊ</small></span>
+        </a>
+
+        <div class="admin-nav-label">KHÔNG GIAN LÀM VIỆC</div>
+        <nav class="nav flex-column admin-nav">
+            <NavLink class="nav-link" href="/admin/dashboard"><span aria-hidden="true">◫</span>Tổng quan</NavLink>
+            <NavLink class="nav-link" href="/admin/san-pham"><span aria-hidden="true">◈</span>Sản phẩm</NavLink>
+            <NavLink class="nav-link" href="/admin/kho"><span aria-hidden="true">▤</span>Kho hàng</NavLink>
+            <NavLink class="nav-link" href="/admin/ban-hang"><span aria-hidden="true">＋</span>Bán hàng tại quầy</NavLink>
+            <NavLink class="nav-link" href="/admin/don-hang"><span aria-hidden="true">▧</span>Đơn hàng & thanh toán</NavLink>
+            <NavLink class="nav-link" href="/admin/khach-hang"><span aria-hidden="true">♙</span>Khách hàng</NavLink>
+            <NavLink class="nav-link" href="/admin/nha-cung-cap"><span aria-hidden="true">◇</span>Nhà cung cấp</NavLink>
+            <NavLink class="nav-link" href="/admin/khuyen-mai"><span aria-hidden="true">✳</span>Khuyến mãi</NavLink>
+            <NavLink class="nav-link" href="/admin/bao-hanh"><span aria-hidden="true">⌁</span>Bảo hành</NavLink>
+            <NavLink class="nav-link" href="/admin/ho-tro"><span aria-hidden="true">☏</span>Hỗ trợ khách hàng</NavLink>
+            <NavLink class="nav-link" href="/admin/noi-dung"><span aria-hidden="true">▤</span>Nội dung</NavLink>
+            <NavLink class="nav-link" href="/admin/bao-cao"><span aria-hidden="true">▥</span>Báo cáo</NavLink>
+            <NavLink class="nav-link" href="/admin/nhan-su"><span aria-hidden="true">♧</span>Nhân sự & phân quyền</NavLink>
+            <NavLink class="nav-link" href="/admin/chi-nhanh"><span aria-hidden="true">⌖</span>Chi nhánh</NavLink>
+            <NavLink class="nav-link" href="/admin/thong-bao"><span aria-hidden="true">♧</span>Thông báo</NavLink>
+            <NavLink class="nav-link" href="/admin/nhat-ky"><span aria-hidden="true">≡</span>Nhật ký hệ thống</NavLink>
+            <NavLink class="nav-link" href="/admin/cau-hinh"><span aria-hidden="true">⚙</span>Cấu hình</NavLink>
+        </nav>
+        <div class="admin-sidebar-note"><span>●</span> Hệ thống MotoHub</div>
+    </aside>
+
+    <main class="admin-main">
+        <header class="admin-topbar">
+            <div class="admin-topbar__context"><span>QUẢN TRỊ CỬA HÀNG</span><strong>Điều hành MotoHub</strong></div>
+            <div class="admin-topbar__actions">
+                <a class="admin-store-link" href="/">← <span>Về cửa hàng</span></a>
+                <AuthorizeView>
+                    <Authorized Context="user">
+                        <span class="admin-user-name">@user.User.Identity?.Name</span>
+                        <form action="/auth/logout" method="post">
+                            <AntiforgeryToken />
+                            <button class="admin-logout" type="submit">Đăng xuất</button>
+                        </form>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+        </header>
+        <article class="admin-content">
+            @Body
+        </article>
+    </main>
+</div>

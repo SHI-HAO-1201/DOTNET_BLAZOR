@@ -1,0 +1,131 @@
+@page "/bao-hanh"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using System.ComponentModel.DataAnnotations
+@using BlazorXe_Xemay.Features.Shared
+@using BlazorXe_Xemay.Features.TaiKhoan
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<AppUser> UserManager
+@inject DichVuKhachHang DichVuKhachHang
+@inject ILogger<BaoHanhCuaToi> Logger
+
+<PageTitle>Bảo hành và bảo dưỡng - MotoHub</PageTitle>
+<h1 class="h2 mb-4">Bảo hành và bảo dưỡng</h1>
+@if (ThongBao is not null)
+{
+    <div class="alert @(ThanhCong ? "alert-success" : "alert-warning")">@ThongBao</div>
+}
+<div class="row g-4">
+    <section class="col-lg-7">
+        <h2 class="h5">Các yêu cầu đã gửi</h2>
+        @if (YeuCaus.Count == 0)
+        {
+            <p class="text-secondary">Chưa có yêu cầu bảo hành.</p>
+        }
+        @foreach (var item in YeuCaus)
+        {
+            <article class="card card-body mb-2">
+                <span class="badge text-bg-secondary align-self-start">@item.TrangThai</span>
+                <p class="mt-2 mb-1">@item.MoTa</p>
+                <small class="text-secondary">@item.NgayTao.ToLocalTime().ToString("g")</small>
+            </article>
+        }
+    </section>
+    <section class="col-lg-5">
+        <div class="card card-body border-0 shadow-sm">
+            <h2 class="h5">Gửi yêu cầu bảo hành</h2>
+            @if (XeDaMua.Count == 0)
+            {
+                <p class="text-secondary">Yêu cầu bảo hành sẽ xuất hiện khi bạn có đơn hàng đã hoàn thành.</p>
+            }
+            else
+            {
+                <EditForm Model="YeuCau" OnValidSubmit="GuiYeuCauAsync">
+                    <DataAnnotationsValidator />
+                    <label class="form-label" for="purchased-bike">Xe đã mua</label>
+                    <InputSelect id="purchased-bike" class="form-select mb-3" @bind-Value="YeuCau.XeMayId">
+                        @foreach (var xe in XeDaMua)
+                        {
+                            <option value="@xe.Id">@xe.TenXe (@xe.MaXe)</option>
+                        }
+                    </InputSelect>
+                    <label class="form-label" for="warranty-description">Mô tả tình trạng</label>
+                    <InputTextArea id="warranty-description" class="form-control mb-3" @bind-Value="YeuCau.MoTa" />
+                    <button class="btn btn-primary" type="submit">Gửi yêu cầu</button>
+                </EditForm>
+            }
+        </div>
+    </section>
+</div>
+
+@code {
+    private List<YeuCauBaoHanh> YeuCaus { get; set; } = [];
+    private List<XeMayModel> XeDaMua { get; set; } = [];
+    private WarrantyForm YeuCau { get; set; } = new();
+    private string? ThongBao { get; set; }
+    private bool ThanhCong { get; set; }
+    private int UserId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(state.User);
+        if (user is null)
+        {
+            return;
+        }
+
+        UserId = user.Id;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        YeuCaus = await db.YeuCauBaoHanhs.AsNoTracking().Where(x => x.NguoiDungId == UserId)
+            .OrderByDescending(x => x.NgayTao).ToListAsync();
+        XeDaMua = await db.ChiTietDonHangs
+            .Join(db.DonHangs, item => item.DonHangId, order => order.Id, (item, order) => new { item, order })
+            .Where(x => x.order.NguoiDungId == UserId && x.order.TrangThai == "HoanThanh")
+            .Join(db.XeMays, orderItem => orderItem.item.XeMayId, product => product.Id, (_, product) => product)
+            .Distinct().AsNoTracking().ToListAsync();
+        YeuCau.XeMayId = XeDaMua.FirstOrDefault()?.Id ?? 0;
+    }
+
+    private async Task GuiYeuCauAsync()
+    {
+        if (UserId == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await DichVuKhachHang.GuiYeuCauBaoHanhAsync(UserId, YeuCau.XeMayId, YeuCau.MoTa);
+            YeuCaus.Insert(0, new YeuCauBaoHanh
+            {
+                NguoiDungId = UserId,
+                XeMayId = YeuCau.XeMayId,
+                MoTa = YeuCau.MoTa.Trim()
+            });
+            YeuCau = new WarrantyForm { XeMayId = XeDaMua.FirstOrDefault()?.Id ?? 0 };
+            ThanhCong = true;
+            ThongBao = "Đã tiếp nhận yêu cầu bảo hành.";
+        }
+        catch (InvalidOperationException exception)
+        {
+            ThanhCong = false;
+            ThongBao = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Không thể gửi yêu cầu bảo hành của người dùng {UserId}.", UserId);
+            ThanhCong = false;
+            ThongBao = "Không thể gửi yêu cầu lúc này.";
+        }
+    }
+
+    private sealed class WarrantyForm
+    {
+        [Range(1, int.MaxValue)]
+        public int XeMayId { get; set; }
+
+        [Required, StringLength(500, MinimumLength = 10)]
+        public string MoTa { get; set; } = string.Empty;
+    }
+}

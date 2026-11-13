@@ -1,0 +1,41 @@
+@page "/thong-bao"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using BlazorXe_Xemay.Features.Shared
+@using BlazorXe_Xemay.Features.TaiKhoan
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<AppUser> UserManager
+
+<PageTitle>Thông báo - MotoHub</PageTitle>
+<h1 class="h2 mb-4">Thông báo</h1>
+@if (ThongBaos.Count == 0)
+{
+    <div class="alert alert-light">Bạn chưa có thông báo mới.</div>
+}
+@foreach (var item in ThongBaos)
+{
+    <article class="card card-body mb-2">
+        <strong>@item.TieuDe</strong>
+        <p class="mb-1">@item.NoiDung</p>
+        <small class="text-secondary">@item.NgayTao.ToLocalTime().ToString("g")</small>
+    </article>
+}
+
+@code {
+    private List<ThongBaoNguoiDung> ThongBaos { get; set; } = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(state.User);
+        if (user is null)
+        {
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        ThongBaos = await db.ThongBaoNguoiDungs.AsNoTracking()
+            .Where(x => x.NguoiDungId == null || x.NguoiDungId == user.Id)
+            .OrderByDescending(x => x.NgayTao).ToListAsync();
+    }
+}

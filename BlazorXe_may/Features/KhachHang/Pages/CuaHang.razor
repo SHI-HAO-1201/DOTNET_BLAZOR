@@ -1,0 +1,48 @@
+@page "/he-thong-cua-hang"
+@using BlazorXe_Xemay.Features.Shared
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Showroom MotoHub</PageTitle>
+
+<section class="content-masthead content-masthead--showroom">
+    <span class="showroom-eyebrow">MOTOHUB · IN PERSON</span>
+    <h1>Chạm vào chiếc xe.<br /><em>Thử một hành trình.</em></h1>
+    <p>Đến showroom để xem xe thực tế, trao đổi nhu cầu sử dụng và nhận tư vấn về hồ sơ, bảo dưỡng, chính sách giao nhận.</p>
+</section>
+
+<section class="content-section">
+    <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-4"><div><span class="showroom-eyebrow">ĐỊA ĐIỂM</span><h2 class="h3 mb-0">Tìm MotoHub gần bạn</h2></div><span class="text-secondary small">Giờ phục vụ tham khảo: 08:00–20:00 hằng ngày</span></div>
+    @if (ChiNhanhs.Count == 0)
+    {
+        <div class="card card-body"><h3 class="h5">Danh sách điểm bán đang được cập nhật</h3><p class="mb-0">Bạn có thể gọi hoặc gửi câu hỏi qua mục Liên hệ để đội ngũ hỗ trợ thông tin nhận xe phù hợp.</p></div>
+    }
+    else
+    {
+        <div class="row row-cols-1 row-cols-md-2 g-4">
+            @foreach (var branch in ChiNhanhs)
+            {
+                var mapQuery = Uri.EscapeDataString(branch.DiaChi);
+                <div class="col"><article class="branch-card h-100">
+                    <div class="branch-card__index">MOTOHUB · @branch.MaChiNhanh</div>
+                    <h2>@branch.TenChiNhanh</h2>
+                    <div class="branch-card__detail"><span>ĐỊA CHỈ</span><p>@(string.IsNullOrWhiteSpace(branch.DiaChi) ? "Vui lòng liên hệ để xác nhận địa chỉ." : branch.DiaChi)</p></div>
+                    <div class="branch-card__detail"><span>ĐIỆN THOẠI</span><p>@if (!string.IsNullOrWhiteSpace(branch.SoDienThoai)) { <a href="tel:@branch.SoDienThoai">@branch.SoDienThoai</a> } else { <a href="/ho-tro">Gửi yêu cầu tư vấn</a> }</p></div>
+                    <div class="branch-card__footer"><span>Hôm nay · 08:00–20:00</span><a href="https://www.google.com/maps/search/?api=1&query=@mapQuery" target="_blank" rel="noopener noreferrer">Mở bản đồ ↗</a></div>
+                </article></div>
+            }
+        </div>
+    }
+</section>
+
+<section class="branch-services"><span class="showroom-eyebrow">TẠI SHOWROOM</span><div class="branch-services__grid"><div><b>01</b><h3>Xem xe thực tế</h3><p>Đối chiếu màu sắc, tư thế ngồi và các chi tiết hoàn thiện.</p></div><div><b>02</b><h3>Tư vấn chọn xe</h3><p>Trao đổi theo nhu cầu đi lại, ngân sách và kinh nghiệm lái.</p></div><div><b>03</b><h3>Hỗ trợ sau mua</h3><p>Hướng dẫn lịch chăm sóc, bảo dưỡng và gửi yêu cầu bảo hành.</p></div></div></section>
+
+@code {
+    private List<ChiNhanh> ChiNhanhs { get; set; } = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        ChiNhanhs = await db.ChiNhanhs.AsNoTracking().Where(x => x.DangHoatDong)
+            .OrderBy(x => x.TenChiNhanh).ToListAsync();
+    }
+}

@@ -1,0 +1,122 @@
+@inherits LayoutComponentBase
+@inject BlazorXe_Xemay.Features.DonHang.GioHangService GioHang
+@implements IDisposable
+
+<div class="page">
+    <div class="showroom-announcement">
+        <span>THE MOTOHUB COLLECTION</span>
+        <span>Xe chính hãng · Tư vấn tận tâm · Thanh toán khi nhận xe</span>
+        <a href="/he-thong-cua-hang">Tìm showroom <span aria-hidden="true">↗</span></a>
+    </div>
+    <nav class="navbar navbar-expand-lg navbar-light showroom-navbar px-3 px-lg-4">
+        <div class="container-fluid">
+            <a class="navbar-brand showroom-brand" href="/" aria-label="MotoHub - Trang chủ">
+                <span class="showroom-brand__mark" aria-hidden="true">M</span>
+                <span>MOTO<span>HUB</span><small>RIDE BEYOND</small></span>
+            </a>
+            <button class="navbar-toggler showroom-toggler" type="button" aria-expanded="@(MenuMo ? "true" : "false")" aria-controls="navbarNav"
+                    aria-label="Mở điều hướng" @onclick="ToggleMenu">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse @(MenuMo ? "show" : string.Empty)" id="navbarNav">
+                <ul class="navbar-nav showroom-links me-auto ms-lg-4">
+                    <li class="nav-item"><NavLink class="nav-link" href="/" Match="NavLinkMatch.All" @onclick="DongMenu">Trang chủ</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="/bo-suu-tap" @onclick="DongMenu">Bộ sưu tập</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="/khuyen-mai" @onclick="DongMenu">Ưu đãi</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="/tin-tuc" @onclick="DongMenu">Tạp chí</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="/he-thong-cua-hang" @onclick="DongMenu">Showroom</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="/ho-tro" @onclick="DongMenu">Liên hệ</NavLink></li>
+                </ul>
+
+                <div class="showroom-nav-actions d-flex align-items-center gap-2 gap-lg-3 flex-wrap">
+                    <form action="/san-pham" method="get" class="showroom-nav-search input-group">
+                        <input class="form-control" name="tuKhoa" placeholder="Tìm mẫu xe..." aria-label="Tìm mẫu xe" />
+                        <button class="btn" type="submit" aria-label="Tìm kiếm">⌕</button>
+                    </form>
+                    <AuthorizeView Roles="QuanTriVien,ChuCuaHang,QuanLy,BanHang,Kho,KeToan,BaoHanh,NhanVien">
+                        <NotAuthorized>
+                            <a href="/gio-hang" class="showroom-cart">
+                                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                                    <path d="M5 8h14l1 13H4L5 8Z" />
+                                    <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+                                </svg>
+                                <span>Giỏ hàng</span><b>@GioHang.TongSoLuong</b>
+                            </a>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                    <AuthorizeView>
+                        <Authorized Context="user">
+                            <AuthorizeView Roles="QuanTriVien,ChuCuaHang,QuanLy,BanHang,Kho,KeToan,BaoHanh,NhanVien">
+                                <Authorized>
+                                    <a class="btn btn-sm btn-outline-dark" href="/admin/dashboard">Quản trị</a>
+                                </Authorized>
+                            </AuthorizeView>
+                            <AuthorizeView Roles="QuanTriVien,ChuCuaHang,QuanLy,BanHang,Kho,KeToan,BaoHanh,NhanVien">
+                                <NotAuthorized>
+                                    <details class="account-menu">
+                                        <summary class="account-menu__trigger">
+                                            <span>@user.User.Identity?.Name</span>
+                                            <span class="account-menu__chevron" aria-hidden="true"></span>
+                                        </summary>
+                                        <div class="account-menu__panel">
+                                            <div class="account-menu__identity">
+                                                <span class="account-menu__avatar" aria-hidden="true">
+                                                    @(user.User.Identity?.Name?.FirstOrDefault().ToString().ToUpperInvariant() ?? "K")
+                                                </span>
+                                                <span>
+                                                    <strong>@user.User.Identity?.Name</strong>
+                                                    <small>Thành viên MotoHub</small>
+                                                </span>
+                                            </div>
+                                            <nav aria-label="Thông tin tài khoản">
+                                                <a href="/tai-khoan">Hồ sơ và địa chỉ</a>
+                                                <a href="/don-hang">Đơn hàng của tôi</a>
+                                                <a href="/yeu-thich">Xe yêu thích</a>
+                                                <a href="/bao-hanh">Yêu cầu bảo hành</a>
+                                                <a href="/thong-bao">Thông báo</a>
+                                            </nav>
+                                        </div>
+                                    </details>
+                                </NotAuthorized>
+                            </AuthorizeView>
+                            <form action="/auth/logout" method="post">
+                                <input type="hidden" name="__RequestVerificationToken" />
+                                <button class="btn btn-sm btn-outline-danger" type="submit">Đăng xuất</button>
+                            </form>
+                        </Authorized>
+                        <NotAuthorized>
+                            <a href="/dang-nhap" class="btn btn-sm btn-primary">Đăng nhập</a>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <article class="content container-fluid px-3 px-lg-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@code {
+    private bool MenuMo { get; set; }
+
+    protected override void OnInitialized()
+    {
+        GioHang.Changed += OnCartChanged;
+    }
+
+    private void OnCartChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleMenu() => MenuMo = !MenuMo;
+
+    private void DongMenu() => MenuMo = false;
+
+    public void Dispose() => GioHang.Changed -= OnCartChanged;
+}
