@@ -1,0 +1,116 @@
+@page "/dang-nhap"
+
+<PageTitle>Đăng nhập - MotoHub</PageTitle>
+
+<div class="auth-card card border-0 shadow-lg">
+    <div class="card-body p-4 p-lg-5">
+        <a href="/" class="brand-mark text-decoration-none">🏍️ MotoHub</a>
+        <h1 class="h3 mt-4 mb-2">Chào mừng trở lại</h1>
+        <p class="text-secondary mb-4">Đăng nhập để mua xe và theo dõi đơn hàng của bạn.</p>
+
+        @if (ThongBaoLoi is not null)
+        {
+            <div class="alert alert-danger" role="alert">@ThongBaoLoi</div>
+        }
+
+        <form action="/auth/login" method="post" class="mb-5">
+            <input type="hidden" name="__RequestVerificationToken" />
+            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+            <div class="mb-3">
+                <label class="form-label" for="login-email">Email</label>
+                <input class="form-control" id="login-email" name="email" type="email" autocomplete="email" required />
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="login-password">Mật khẩu</label>
+                <div class="input-group">
+                    <input class="form-control" id="login-password" name="password" type="@(ShowLoginPassword ? "text" : "password")" autocomplete="current-password" required />
+                    <button class="btn btn-outline-secondary password-toggle" type="button"
+                            aria-label="@(ShowLoginPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu")"
+                            aria-pressed="@ShowLoginPassword"
+                            @onclick="() => ShowLoginPassword = !ShowLoginPassword">
+                        @if (ShowLoginPassword)
+                        {
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8" />
+                                <path d="M9.9 5.2A10.8 10.8 0 0112 5c5.2 0 9 5.4 9 7a10.7 10.7 0 01-2.2 3.2M6.2 6.2C3.9 7.7 2 10.3 2 12c0 1.6 3.8 7 10 7a10 10 0 004.1-.9" />
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                                <circle cx="12" cy="12" r="3" />
+                            </svg>
+                        }
+                    </button>
+                </div>
+            </div>
+            <div class="form-check mb-4">
+                <input class="form-check-input" id="remember" name="remember" type="checkbox" />
+                <label class="form-check-label" for="remember">Duy trì đăng nhập trên thiết bị này</label>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">Đăng nhập</button>
+        </form>
+
+        <hr />
+        <h2 class="h5">Tạo tài khoản khách hàng</h2>
+        <form action="/auth/register" method="post">
+            <input type="hidden" name="__RequestVerificationToken" />
+            <div class="mb-3">
+                <label class="form-label" for="register-name">Họ và tên</label>
+                <input class="form-control" id="register-name" name="fullName" maxlength="100" autocomplete="name" required />
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="register-email">Email</label>
+                <input class="form-control" id="register-email" name="email" type="email" maxlength="256" autocomplete="email" required />
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="register-password">Mật khẩu</label>
+                <div class="input-group">
+                    <input class="form-control" id="register-password" name="password" type="@(ShowRegisterPassword ? "text" : "password")" minlength="10" autocomplete="new-password" required />
+                    <button class="btn btn-outline-secondary password-toggle" type="button"
+                            aria-label="@(ShowRegisterPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu")"
+                            aria-pressed="@ShowRegisterPassword"
+                            @onclick="() => ShowRegisterPassword = !ShowRegisterPassword">
+                        @if (ShowRegisterPassword)
+                        {
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8" />
+                                <path d="M9.9 5.2A10.8 10.8 0 0112 5c5.2 0 9 5.4 9 7a10.7 10.7 0 01-2.2 3.2M6.2 6.2C3.9 7.7 2 10.3 2 12c0 1.6 3.8 7 10 7a10 10 0 004.1-.9" />
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                                <circle cx="12" cy="12" r="3" />
+                            </svg>
+                        }
+                    </button>
+                </div>
+                <div class="form-text">Tối thiểu 10 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt.</div>
+            </div>
+            <button class="btn btn-outline-primary w-100" type="submit">Đăng ký</button>
+        </form>
+        <a class="d-block text-center mt-4" href="/">Quay lại cửa hàng</a>
+    </div>
+</div>
+
+@code {
+    private bool ShowLoginPassword { get; set; }
+    private bool ShowRegisterPassword { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private string? ThongBaoLoi => Error switch
+    {
+        "invalid" => "Email hoặc mật khẩu không chính xác.",
+        "locked" => "Tài khoản tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau.",
+        "registration" => "Không thể tạo tài khoản. Email có thể đã được sử dụng hoặc mật khẩu chưa đáp ứng yêu cầu.",
+        _ => null
+    };
+}

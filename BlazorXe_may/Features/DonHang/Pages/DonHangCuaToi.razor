@@ -1,0 +1,86 @@
+@page "/don-hang"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "User")]
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<BlazorXe_Xemay.Features.TaiKhoan.AppUser> UserManager
+@inject DichVuDonHang DichVuDonHang
+@inject ILogger<DonHangCuaToi> Logger
+
+<PageTitle>Đơn hàng của tôi - MotoHub</PageTitle>
+<h1 class="h2 mb-4">Đơn hàng của tôi</h1>
+@if (ThongBao is not null)
+{
+    <div class="alert alert-info" role="status">@ThongBao</div>
+}
+@if (DonHangs.Count == 0)
+{
+    <div class="alert alert-light">Bạn chưa có đơn hàng. <a href="/san-pham">Khám phá xe máy</a></div>
+}
+else
+{
+    @foreach (var order in DonHangs)
+    {
+        <article class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white d-flex justify-content-between">
+                <strong>@order.MaDonHang</strong>
+                <span class="badge text-bg-primary">@order.TrangThai</span>
+            </div>
+            <div class="card-body">
+                <p class="small text-secondary">Đặt ngày @order.NgayTao.ToLocalTime().ToString("g") · Thanh toán khi nhận xe</p>
+                <ul>
+                    @foreach (var item in order.ChiTiet)
+                    {
+                        <li>@item.TenXe × @item.SoLuong — @((item.DonGia * item.SoLuong).ToString("N0")) ₫</li>
+                    }
+                </ul>
+                <div><strong>Tổng tiền: @order.TongTien.ToString("N0") ₫</strong></div>
+                <div>Giao đến: @order.NguoiNhan · @order.SoDienThoaiNhan · @order.DiaChiNhan</div>
+                @if (order.TrangThai == "ChoXacNhan")
+                {
+                    <button class="btn btn-sm btn-outline-danger mt-2" @onclick="() => HuyDonAsync(order.Id)">Yêu cầu hủy đơn</button>
+                }
+            </div>
+        </article>
+    }
+}
+
+@code {
+    private List<BlazorXe_Xemay.Features.TaiKhoan.DonHang> DonHangs { get; set; } = [];
+    private string? ThongBao { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(state.User);
+        if (user is not null)
+        {
+            DonHangs = await DichVuDonHang.LayDonHangCuaNguoiDungAsync(user.Id);
+        }
+    }
+
+    private async Task HuyDonAsync(int orderId)
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(state.User);
+        if (user is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await DichVuDonHang.HuyDonAsync(orderId, user.Id, staff: false);
+            DonHangs = await DichVuDonHang.LayDonHangCuaNguoiDungAsync(user.Id);
+            ThongBao = "Đơn hàng đã được hủy và số lượng được hoàn lại kho.";
+        }
+        catch (InvalidOperationException exception)
+        {
+            ThongBao = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Không thể hủy đơn hàng {OrderId}.", orderId);
+            ThongBao = "Không thể hủy đơn lúc này.";
+        }
+    }
+}

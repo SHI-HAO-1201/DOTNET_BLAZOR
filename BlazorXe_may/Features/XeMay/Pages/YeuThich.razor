@@ -1,0 +1,74 @@
+@page "/yeu-thich"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using BlazorXe_Xemay.Features.Shared
+@using BlazorXe_Xemay.Features.TaiKhoan
+@using BlazorXe_Xemay.Features.XeMay.Models
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<AppUser> UserManager
+
+<PageTitle>Xe yêu thích - MotoHub</PageTitle>
+<h1 class="h2 mb-4">Xe yêu thích</h1>
+@if (XeMayYeuThich.Count == 0)
+{
+    <div class="alert alert-light">Danh sách yêu thích đang trống. Hãy chọn xe từ <a href="/san-pham">danh mục xe</a>.</div>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-md-3 g-3">
+        @foreach (var xe in XeMayYeuThich)
+        {
+            <div class="col">
+                <article class="card h-100">
+                    <div class="card-body">
+                        <a href="@($"/xe/{xe.Id}")" class="h5">@xe.TenXe</a>
+                        <p>@xe.HangXe · @xe.GiaBan.ToString("N0") ₫</p>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => XoaAsync(xe.Id)">Bỏ yêu thích</button>
+                    </div>
+                </article>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<XeMayModel> XeMayYeuThich { get; set; } = [];
+    private int NguoiDungId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(state.User);
+        if (user is null)
+        {
+            return;
+        }
+
+        NguoiDungId = user.Id;
+        await TaiDuLieuAsync();
+    }
+
+    private async Task TaiDuLieuAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        XeMayYeuThich = await db.XeYeuThichs.Where(x => x.NguoiDungId == NguoiDungId)
+            .Join(db.XeMays, favorite => favorite.XeMayId, product => product.Id,
+                (_, product) => product)
+            .AsNoTracking().ToListAsync();
+    }
+
+    private async Task XoaAsync(int productId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var favorite = await db.XeYeuThichs.SingleOrDefaultAsync(x =>
+            x.NguoiDungId == NguoiDungId && x.XeMayId == productId);
+        if (favorite is null)
+        {
+            return;
+        }
+
+        db.XeYeuThichs.Remove(favorite);
+        await db.SaveChangesAsync();
+        XeMayYeuThich.RemoveAll(x => x.Id == productId);
+    }
+}

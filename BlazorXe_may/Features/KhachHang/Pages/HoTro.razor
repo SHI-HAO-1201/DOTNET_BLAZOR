@@ -1,0 +1,84 @@
+@page "/ho-tro"
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using BlazorXe_Xemay.Features.Shared
+@using BlazorXe_Xemay.Features.TaiKhoan
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<AppUser> UserManager
+@inject ILogger<HoTro> Logger
+
+<PageTitle>Hỗ trợ khách hàng - MotoHub</PageTitle>
+<section class="content-masthead content-masthead--support">
+    <span class="showroom-eyebrow">MOTOHUB CARE · LUÔN SẴN SÀNG LẮNG NGHE</span>
+    <h1>Đồng hành<br /><em>trước và sau hành trình.</em></h1>
+    <p>Gửi câu hỏi về xe, đơn hàng hoặc dịch vụ. Đội ngũ MotoHub sẽ tiếp nhận và phản hồi qua thông tin tài khoản nếu bạn đã đăng nhập.</p>
+</section>
+<section class="support-topics"><div><b>01</b><h2>Tư vấn chọn xe</h2><p>So sánh nhu cầu sử dụng, ngân sách và các dòng xe.</p></div><div><b>02</b><h2>Đơn hàng</h2><p>Hỏi về trạng thái, nhận xe và thanh toán COD.</p></div><div><b>03</b><h2>Bảo hành</h2><p>Gửi mô tả tình trạng để bộ phận kỹ thuật tiếp nhận.</p></div></section>
+<section class="content-section support-content">
+<div><span class="showroom-eyebrow">CÂU HỎI THƯỜNG GẶP</span><h2 class="h3 mb-3">Thông tin nhanh</h2>
+    <details class="support-faq"><summary>Tôi có thể áp mã giảm giá ở đâu?</summary><p>Nhập mã trong bước thanh toán và nhấn “Áp dụng”. Hệ thống sẽ kiểm tra thời hạn, trạng thái và giá trị đơn tối thiểu.</p></details>
+    <details class="support-faq"><summary>Đơn hàng thanh toán như thế nào?</summary><p>Hiện website mô phỏng thanh toán khi nhận xe (COD). Nhân viên sẽ xác nhận thông tin và điểm nhận xe.</p></details>
+    <details class="support-faq"><summary>Gửi yêu cầu bảo hành ở đâu?</summary><p>Đăng nhập, mở mục Bảo hành và chọn xe trong danh sách đơn hàng đã hoàn tất để gửi mô tả tình trạng.</p></details>
+</div>
+<div><span class="showroom-eyebrow">GỬI LỜI NHẮN</span><h2 class="h3 mb-3">MotoHub sẽ hỗ trợ bạn</h2>
+@if (ThongBao is not null)
+{
+    <div class="alert @(ThanhCong ? "alert-success" : "alert-danger")">@ThongBao</div>
+}
+<EditForm Model="YeuCau" OnValidSubmit="GuiYeuCauAsync" class="card card-body border-0 shadow-sm" style="max-width:700px">
+    <DataAnnotationsValidator />
+    <ValidationSummary class="text-danger" />
+    <label class="form-label" for="support-type">Chủ đề</label>
+    <InputSelect id="support-type" class="form-select mb-3" @bind-Value="YeuCau.LoaiYeuCau"><option>Tư vấn xe</option><option>Đơn hàng và thanh toán</option><option>Bảo hành và bảo dưỡng</option><option>Góp ý dịch vụ</option></InputSelect>
+    <label class="form-label" for="subject">Tiêu đề</label>
+    <InputText id="subject" class="form-control mb-3" @bind-Value="YeuCau.TieuDe" />
+    <label class="form-label" for="message">Nội dung</label>
+    <InputTextArea id="message" class="form-control mb-3" rows="5" @bind-Value="YeuCau.NoiDung" />
+    <button class="btn btn-primary align-self-start" type="submit">Gửi yêu cầu</button>
+</EditForm>
+</div>
+</section>
+
+@code {
+    private SupportForm YeuCau { get; set; } = new();
+    private string? ThongBao { get; set; }
+    private bool ThanhCong { get; set; }
+
+    private async Task GuiYeuCauAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(state.User);
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            db.PhieuHoTros.Add(new PhieuHoTro
+            {
+                NguoiDungId = user?.Id,
+                TieuDe = $"[{YeuCau.LoaiYeuCau}] {YeuCau.TieuDe.Trim()}",
+                NoiDung = YeuCau.NoiDung.Trim()
+            });
+            await db.SaveChangesAsync();
+            YeuCau = new SupportForm();
+            ThanhCong = true;
+            ThongBao = "Đã gửi yêu cầu hỗ trợ. Mã yêu cầu của bạn đã được ghi nhận.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Không thể lưu yêu cầu hỗ trợ.");
+            ThanhCong = false;
+            ThongBao = "Không thể gửi yêu cầu lúc này. Vui lòng thử lại sau.";
+        }
+    }
+
+    private sealed class SupportForm
+    {
+        public string LoaiYeuCau { get; set; } = "Tư vấn xe";
+
+        [Required, StringLength(160)]
+        public string TieuDe { get; set; } = string.Empty;
+
+        [Required, StringLength(2000, MinimumLength = 10)]
+        public string NoiDung { get; set; } = string.Empty;
+    }
+}

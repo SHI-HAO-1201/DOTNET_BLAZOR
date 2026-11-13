@@ -1,0 +1,249 @@
+@page "/"
+@page "/san-pham"
+@using BlazorXe_Xemay.Features.XeMay.Models
+@using BlazorXe_Xemay.Features.XeMay.Services
+@inject XeMayService XeMayService
+@inject BlazorXe_Xemay.Features.DonHang.GioHangService GioHang
+@inject ILogger<Trangchu> Logger
+
+<PageTitle>Showroom xe máy chính hãng - MotoHub</PageTitle>
+
+<section class="showroom-hero">
+    <div class="showroom-hero__glow" aria-hidden="true"></div>
+    <div class="showroom-hero__copy">
+        <div class="showroom-eyebrow"><span></span> THE MOTOHUB COLLECTION</div>
+        <h1>Chọn chất riêng.<br /><em>Lăn bánh đam mê.</em></h1>
+        <p>Tuyển chọn những mẫu xe ấn tượng từ các thương hiệu hàng đầu. Tìm cảm hứng, chọn hành trình của riêng bạn.</p>
+        <a class="showroom-cta" href="#danh-sach-xe">Khám phá bộ sưu tập <span aria-hidden="true">↘</span></a>
+        <div class="showroom-proof">
+            <span><strong>Chính hãng</strong><small>Cam kết nguồn gốc</small></span>
+            <span><strong>Hậu mãi tận tâm</strong><small>Đồng hành dài lâu</small></span>
+            <span><strong>Thanh toán COD</strong><small>An tâm khi nhận xe</small></span>
+        </div>
+    </div>
+    <div class="showroom-hero__visual" aria-hidden="true">
+        <div class="hero-orbit hero-orbit--outer"></div>
+        <div class="hero-orbit hero-orbit--inner"></div>
+        <div class="hero-bike">
+            <img src="https://images.pexels.com/photos/2116475/pexels-photo-2116475.jpeg?auto=compress&amp;cs=tinysrgb&amp;w=900"
+                 alt="" class="hero-bike__photo" />
+            <span>M</span>
+        </div>
+        <div class="hero-vertical-label">RIDE YOUR OWN WAY · MOTOHUB</div>
+        <div class="hero-edition">EST. 2026 <span>✦</span> VIETNAM</div>
+    </div>
+    <div class="showroom-index"><span>01</span> / THE SHOWROOM</div>
+</section>
+
+<section class="showroom-controls" id="danh-sach-xe" aria-label="Tìm kiếm và lọc xe">
+    <div class="showroom-controls__heading">
+        <span class="showroom-eyebrow">TÌM CHIẾC XE CỦA BẠN</span>
+        <h2>Điều gì khiến bạn rung động?</h2>
+    </div>
+    <form method="get" action="/san-pham" class="showroom-filter">
+        <label class="showroom-field showroom-field--search">
+            <span>Từ khóa</span>
+            <input type="search" name="tuKhoa" value="@TuKhoa" placeholder="Tên xe, thương hiệu..." />
+        </label>
+        <label class="showroom-field">
+            <span>Thương hiệu</span>
+            <select name="hangXe" @bind="HangXe">
+                <option value="">Tất cả thương hiệu</option>
+                @foreach (var brand in Brands)
+                {
+                    <option value="@brand">@brand</option>
+                }
+            </select>
+        </label>
+        <label class="showroom-field">
+            <span>Giá từ (₫)</span>
+            <input type="number" name="giaTu" min="0" value="@GiaTu" placeholder="Không giới hạn" />
+        </label>
+        <label class="showroom-field">
+            <span>Đến (₫)</span>
+            <input type="number" name="giaDen" min="0" value="@GiaDen" placeholder="Không giới hạn" />
+        </label>
+        <label class="showroom-field showroom-field--sort">
+            <span>Sắp xếp</span>
+            <select name="sapXep" @bind="SapXep">
+                <option value="moi">Mới nhất</option>
+                <option value="gia-tang">Giá thấp đến cao</option>
+                <option value="gia-giam">Giá cao đến thấp</option>
+                <option value="ten">Tên xe</option>
+            </select>
+        </label>
+        <button class="showroom-filter__submit" type="submit" aria-label="Tìm xe">Tìm xe <span aria-hidden="true">↗</span></button>
+    </form>
+    @if (Brands.Count > 1 && DanhSachXe is { Count: > 0 })
+    {
+        <nav class="brand-jump" aria-label="Đi tới thương hiệu">
+            <span>ĐI TỚI</span>
+            @foreach (var section in DanhSachXe.GroupBy(x => x.HangXe).OrderBy(x => x.Key))
+            {
+                <a href="@($"#hang-{Slug(section.Key)}")">@section.Key <span>@section.Count().ToString("00")</span></a>
+            }
+        </nav>
+    }
+</section>
+
+<section class="showroom-catalog" aria-labelledby="catalog-title">
+    <div class="catalog-heading">
+        <div>
+            <span class="showroom-eyebrow">ĐƯỢC TUYỂN CHỌN DÀNH CHO BẠN</span>
+            <h2 id="catalog-title">Bộ sưu tập <span>xe máy</span></h2>
+        </div>
+        <div class="catalog-total"><strong>@(DanhSachXe?.Count ?? 0)</strong><span>mẫu xe<br />đang trưng bày</span></div>
+    </div>
+
+    @if (DangTai)
+    {
+        <div class="showroom-status">Đang chuẩn bị bộ sưu tập...</div>
+    }
+    else if (ThongBaoLoi is not null)
+    {
+        <div class="alert alert-danger" role="alert">@ThongBaoLoi</div>
+    }
+    else if (DanhSachXe is { Count: 0 })
+    {
+        <div class="showroom-empty">
+            <span aria-hidden="true">✦</span>
+            <h3>Chưa tìm thấy mẫu xe phù hợp</h3>
+            <p>Thử thay đổi bộ lọc để khám phá thêm các mẫu xe trong showroom.</p>
+            <a href="/san-pham">Xem toàn bộ bộ sưu tập</a>
+        </div>
+    }
+    else if (DanhSachXe is not null)
+    {
+        var brandSections = DanhSachXe.GroupBy(x => x.HangXe).OrderBy(x => x.Key).ToList();
+        @for (var brandIndex = 0; brandIndex < brandSections.Count; brandIndex++)
+        {
+            var section = brandSections[brandIndex];
+            <section class="brand-section" id="@($"hang-{Slug(section.Key)}")" aria-labelledby="@($"brand-title-{brandIndex}")">
+                <div class="brand-divider">
+                    <div class="brand-divider__line"></div>
+                    <div class="brand-divider__title">
+                        <span class="brand-divider__index">0@(brandIndex + 1)</span>
+                        <h3 id="@($"brand-title-{brandIndex}")">@section.Key</h3>
+                        <span class="brand-divider__count">@section.Count().ToString("00") MẪU XE</span>
+                    </div>
+                    <div class="brand-divider__line"></div>
+                </div>
+                <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+                    @foreach (var xe in section)
+                    {
+                        <div class="col">
+                            <article class="showroom-card h-100">
+                                <a href="@($"/xe/{xe.Id}")" class="showroom-card__image" aria-label="@($"Xem chi tiết {xe.TenXe}")">
+                                    <img src="@ImageUrl(xe)" alt="@xe.TenXe" loading="lazy" />
+                                    <span class="showroom-card__image-index">MH / @xe.Id.ToString("000")</span>
+                                    @if (xe.GiaNiemYet > xe.GiaBan)
+                                    {
+                                        <span class="showroom-card__tag">ƯU ĐÃI ĐẶC BIỆT</span>
+                                    }
+                                    <span class="showroom-card__image-arrow" aria-hidden="true">↗</span>
+                                </a>
+                                <div class="showroom-card__body">
+                                    <div class="showroom-card__category"><span>@xe.HangXe</span><span>@xe.LoaiXe</span></div>
+                                    <h4><a href="@($"/xe/{xe.Id}")">@xe.TenXe</a></h4>
+                                    @if (!string.IsNullOrWhiteSpace(xe.MoTa))
+                                    {
+                                        <p class="showroom-card__description">@xe.MoTa</p>
+                                    }
+                                    <div class="showroom-card__price-row">
+                                        <div>
+                                            <span class="showroom-card__price">@xe.GiaBan.ToString("N0") <small>₫</small></span>
+                                            @if (xe.GiaNiemYet > xe.GiaBan)
+                                            {
+                                                <span class="showroom-card__old-price">@xe.GiaNiemYet.ToString("N0") ₫</span>
+                                            }
+                                        </div>
+                                        <span class="showroom-card__stock"><i></i> @(xe.SoLuong > 0 ? "Sẵn sàng" : "Tạm hết")</span>
+                                    </div>
+                                    <div class="showroom-card__actions">
+                                        <a href="@($"/xe/{xe.Id}")">Khám phá xe <span aria-hidden="true">↗</span></a>
+                                        <AuthorizeView Roles="QuanTriVien,ChuCuaHang,QuanLy,BanHang,Kho,KeToan,BaoHanh,NhanVien">
+                                            <Authorized>
+                                                <a class="btn btn-sm btn-outline-primary" href="@($"/admin/san-pham?xeId={xe.Id}")">Cập nhật thông tin xe</a>
+                                            </Authorized>
+                                            <NotAuthorized>
+                                                <button type="button" disabled="@(xe.SoLuong < 1)" @onclick="() => ThemGioHang(xe.Id)">
+                                                    @(xe.SoLuong > 0 ? "Thêm vào giỏ +" : "Hết hàng")
+                                                </button>
+                                            </NotAuthorized>
+                                        </AuthorizeView>
+                                    </div>
+                                </div>
+                            </article>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+    }
+</section>
+
+<section class="showroom-footer-note">
+    <span class="showroom-footer-note__star" aria-hidden="true">✦</span>
+    <p>Hành trình đáng nhớ bắt đầu từ lựa chọn đúng.</p>
+    <span>MOTOHUB · RIDE BEYOND</span>
+</section>
+
+@code {
+    [SupplyParameterFromQuery(Name = "tuKhoa")]
+    public string? TuKhoa { get; set; }
+
+    [SupplyParameterFromQuery(Name = "hangXe")]
+    public string? HangXe { get; set; }
+
+    [SupplyParameterFromQuery(Name = "giaTu")]
+    public decimal? GiaTu { get; set; }
+
+    [SupplyParameterFromQuery(Name = "giaDen")]
+    public decimal? GiaDen { get; set; }
+
+    [SupplyParameterFromQuery(Name = "sapXep")]
+    public string? SapXep { get; set; }
+
+    private List<XeMayModel>? DanhSachXe { get; set; }
+    private List<string> Brands { get; set; } = [];
+    private bool DangTai { get; set; } = true;
+    private string? ThongBaoLoi { get; set; }
+    private static readonly string[] HinhAnhShowroom =
+    [
+        "https://images.pexels.com/photos/2116475/pexels-photo-2116475.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        "https://images.pexels.com/photos/2393821/pexels-photo-2393821.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        "https://images.pexels.com/photos/1413412/pexels-photo-1413412.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1200&q=85"
+    ];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        DangTai = true;
+        ThongBaoLoi = null;
+        try
+        {
+            var allProducts = await XeMayService.LayDanhSachXeAsync();
+            Brands = allProducts.Select(x => x.HangXe).Distinct().Order().ToList();
+            DanhSachXe = await XeMayService.LayDanhSachXeAsync(TuKhoa, HangXe, GiaTu, GiaDen, SapXep);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Không thể tải danh sách xe.");
+            ThongBaoLoi = "Không thể tải danh sách xe lúc này. Vui lòng thử lại sau.";
+        }
+        finally
+        {
+            DangTai = false;
+        }
+    }
+
+    private void ThemGioHang(int xeId) => GioHang.Them(xeId);
+
+    private static string Slug(string value) =>
+        string.Join('-', value.Trim().ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+
+    private static string ImageUrl(XeMayModel xe) =>
+        string.IsNullOrWhiteSpace(xe.HinhAnh) || xe.HinhAnh.Contains("placehold.co", StringComparison.OrdinalIgnoreCase)
+            ? HinhAnhShowroom[Math.Abs(xe.Id) % HinhAnhShowroom.Length]
+            : xe.HinhAnh;
+}

@@ -1,0 +1,117 @@
+@page "/gio-hang"
+@using BlazorXe_Xemay.Features.XeMay.Models
+@using BlazorXe_Xemay.Features.XeMay.Services
+@inject GioHangService GioHangState
+@inject XeMayService XeMayService
+@implements IDisposable
+
+<PageTitle>Giỏ hàng - MotoHub</PageTitle>
+<AuthorizeView Roles="QuanTriVien,ChuCuaHang,QuanLy,BanHang,Kho,KeToan,BaoHanh,NhanVien">
+<Authorized>
+    <div class="alert alert-info">Tài khoản quản trị không sử dụng giỏ hàng. Quản lý đơn tại khu vực quản trị.</div>
+    <a class="btn btn-primary" href="/admin/dashboard">Mở trang quản trị</a>
+</Authorized>
+<NotAuthorized Context="shopper">
+<h1 class="h2 mb-4">Giỏ hàng của bạn</h1>
+
+@if (MatHang.Count == 0)
+{
+    <div class="empty-state card card-body text-center py-5">
+        <p class="h5">Giỏ hàng đang trống.</p>
+        <a href="/san-pham" class="btn btn-primary align-self-center">Khám phá xe máy</a>
+    </div>
+}
+else
+{
+    <div class="row g-4">
+        <section class="col-lg-8">
+            @foreach (var item in MatHang)
+            {
+                <article class="card border-0 shadow-sm mb-3">
+                    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+                        <img class="cart-image" src="@(string.IsNullOrWhiteSpace(item.Xe.HinhAnh) ? "https://placehold.co/160x120?text=MotoHub" : item.Xe.HinhAnh)" alt="@item.Xe.TenXe" />
+                        <div class="flex-grow-1">
+                            <a class="h5 text-decoration-none" href="@($"/xe/{item.Xe.Id}")">@item.Xe.TenXe</a>
+                            <p class="text-secondary mb-1">@item.Xe.HangXe</p>
+                            <strong>@item.Xe.GiaBan.ToString("N0") ₫</strong>
+                        </div>
+                        <div>
+                            <label class="form-label" for="@($"quantity-{item.Xe.Id}")">Số lượng</label>
+                            <input id="@($"quantity-{item.Xe.Id}")" class="form-control" type="number" min="1" max="@item.Xe.SoLuong" value="@item.SoLuong"
+                                   @onchange="e => CapNhat(item.Xe.Id, e)" />
+                        </div>
+                        <button class="btn btn-outline-danger" @onclick="() => Xoa(item.Xe.Id)">Xóa</button>
+                    </div>
+                </article>
+            }
+        </section>
+        <aside class="col-lg-4">
+            <div class="card border-0 shadow-sm p-4">
+                <h2 class="h5">Tạm tính</h2>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Tổng cộng</span>
+                    <strong>@TongTien.ToString("N0") ₫</strong>
+                </div>
+                <p class="small text-secondary">Thanh toán khi nhận xe (COD). Giá và tồn kho sẽ được kiểm tra khi xác nhận đơn.</p>
+                <AuthorizeView Roles="QuanTriVien,ChuCuaHang,QuanLy,BanHang,Kho,KeToan,BaoHanh,NhanVien">
+                    <NotAuthorized Context="nonAdmin">
+                        <AuthorizeView>
+                            <Authorized Context="cartUser"><a href="/thanh-toan" class="btn btn-danger w-100">Tiến hành đặt hàng</a></Authorized>
+                            <NotAuthorized Context="anonymous"><a href="/dang-nhap?returnUrl=%2Fthanh-toan" class="btn btn-primary w-100">Đăng nhập để đặt hàng</a></NotAuthorized>
+                        </AuthorizeView>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
+        </aside>
+    </div>
+}
+</NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<(XeMayModel Xe, int SoLuong)> MatHang { get; set; } = [];
+    private decimal TongTien => MatHang.Sum(x => x.Xe.GiaBan * x.SoLuong);
+
+    protected override void OnInitialized()
+    {
+        GioHangState.Changed += OnCartChanged;
+    }
+
+    protected override Task OnParametersSetAsync() => TaiGioHangAsync();
+
+    private async Task TaiGioHangAsync()
+    {
+        var products = new List<(XeMayModel Xe, int SoLuong)>();
+        foreach (var item in GioHangState.Items)
+        {
+            var product = await XeMayService.LayTheoIdAsync(item.Key);
+            if (product is not null && product.DangKinhDoanh)
+            {
+                products.Add((product, item.Value));
+            }
+        }
+
+        MatHang = products;
+    }
+
+    private async void OnCartChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            await TaiGioHangAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void CapNhat(int productId, ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var quantity))
+        {
+            GioHangState.CapNhatSoLuong(productId, quantity);
+        }
+    }
+
+    private void Xoa(int productId) => GioHangState.Xoa(productId);
+
+    public void Dispose() => GioHangState.Changed -= OnCartChanged;
+}

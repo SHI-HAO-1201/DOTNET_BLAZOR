@@ -1,0 +1,231 @@
+@page "/xe/{Id:int}"
+@using BlazorXe_Xemay.Features.Shared
+@using BlazorXe_Xemay.Features.TaiKhoan
+@using BlazorXe_Xemay.Features.XeMay.Models
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject BlazorXe_Xemay.Features.XeMay.Services.XeMayService XeMayService
+@inject BlazorXe_Xemay.Features.DonHang.GioHangService GioHang
+@inject BlazorXe_Xemay.Features.DonHang.SoSanhXeService SoSanh
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<AppUser> UserManager
+@inject NavigationManager Navigation
+@inject ILogger<ChiTietXe> Logger
+
+<PageTitle>@(Xe?.TenXe ?? "Chi tiết xe") - MotoHub</PageTitle>
+
+@if (DangTai)
+{
+    <p class="alert alert-info">Đang tải thông tin xe...</p>
+}
+else if (Xe is null)
+{
+    <p class="alert alert-warning">Không tìm thấy xe hoặc xe đã ngừng kinh doanh.</p>
+}
+else
+{
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Trang chủ</a></li>
+            <li class="breadcrumb-item"><a href="/san-pham">Xe máy</a></li>
+            <li class="breadcrumb-item active" aria-current="page">@Xe.TenXe</li>
+        </ol>
+    </nav>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <img class="img-fluid rounded-4 shadow-sm w-100 product-detail-image"
+                 src="@(string.IsNullOrWhiteSpace(Xe.HinhAnh) ? "https://placehold.co/900x650?text=MotoHub" : Xe.HinhAnh)"
+                 alt="@Xe.TenXe" />
+        </div>
+        <div class="col-lg-6">
+            <span class="badge text-bg-light">@Xe.HangXe · @Xe.LoaiXe</span>
+            <h1 class="display-6 fw-bold mt-3">@Xe.TenXe</h1>
+            @if (!string.IsNullOrWhiteSpace(Xe.MaXe))
+            {
+                <p class="text-secondary">Mã xe: @Xe.MaXe</p>
+            }
+            <p class="product-price fs-2">@Xe.GiaBan.ToString("N0") ₫</p>
+            @if (Xe.GiaNiemYet > Xe.GiaBan)
+            {
+                <p class="text-secondary text-decoration-line-through">@Xe.GiaNiemYet.ToString("N0") ₫</p>
+            }
+            <p>@Xe.MoTa</p>
+            <ul class="list-group list-group-flush mb-4">
+                <li class="list-group-item px-0">Tình trạng: @Xe.TinhTrang</li>
+                <li class="list-group-item px-0">Năm sản xuất: @(Xe.NamSanXuat?.ToString() ?? "Đang cập nhật")</li>
+                <li class="list-group-item px-0">Phân khối: @(Xe.PhanKho?.ToString() ?? "Đang cập nhật") cc</li>
+                <li class="list-group-item px-0">Bảo hành: @Xe.BaoHanhThang tháng</li>
+                <li class="list-group-item px-0">Có sẵn: @Xe.SoLuong</li>
+            </ul>
+            <AuthorizeView Roles="QuanTriVien,ChuCuaHang,QuanLy,BanHang,Kho,KeToan,BaoHanh,NhanVien">
+                <Authorized>
+                    <a class="btn btn-primary btn-lg" href="@($"/admin/san-pham?xeId={Xe.Id}")">Cập nhật thông tin mô tả xe</a>
+                </Authorized>
+                <NotAuthorized Context="shopper">
+                    <button class="btn btn-danger btn-lg me-2" disabled="@(Xe.SoLuong < 1)" @onclick="MuaNgay">Mua ngay</button>
+                    <button class="btn btn-outline-primary btn-lg" disabled="@(Xe.SoLuong < 1)" @onclick="ThemVaoGio">Thêm vào giỏ</button>
+                    <button class="btn btn-link btn-lg" @onclick="ThemSoSanh">So sánh xe</button>
+                    @if (ThongBao is not null)
+                    {
+                        <div class="alert alert-success mt-3" role="status">@ThongBao <a href="/gio-hang">Xem giỏ hàng</a></div>
+                    }
+                    <div class="mt-4">
+                        <AuthorizeView>
+                            <Authorized Context="reviewUser">
+                                <button class="btn btn-link px-0" @onclick="ThemYeuThichAsync">Thêm vào danh sách yêu thích</button>
+                            </Authorized>
+                            <NotAuthorized>
+                                <a class="btn btn-link px-0" href="/dang-nhap">Đăng nhập để lưu xe yêu thích</a>
+                            </NotAuthorized>
+                        </AuthorizeView>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </div>
+
+    <AuthorizeView Roles="QuanTriVien,ChuCuaHang,QuanLy,BanHang,Kho,KeToan,BaoHanh,NhanVien">
+    <NotAuthorized Context="shopperReviews">
+    <section class="mt-5">
+        <h2 class="h4">Đánh giá sản phẩm</h2>
+        @if (DanhGias.Count == 0)
+        {
+            <p class="text-secondary">Chưa có đánh giá.</p>
+        }
+        else
+        {
+            @foreach (var review in DanhGias)
+            {
+                <article class="card card-body mb-2">
+                    <strong>@review.SoSao / 5 sao</strong>
+                    <p class="mb-0">@review.NoiDung</p>
+                </article>
+            }
+        }
+        <AuthorizeView>
+            <Authorized Context="reviewFormUser">
+                <EditForm Model="DanhGia" OnValidSubmit="GuiDanhGiaAsync" class="card card-body mt-3">
+                    <DataAnnotationsValidator />
+                    <label class="form-label" for="rating">Số sao</label>
+                    <InputSelect class="form-select mb-2" id="rating" @bind-Value="DanhGia.SoSao">
+                        @for (var score = 5; score >= 1; score--)
+                        {
+                            <option value="@score">@score sao</option>
+                        }
+                    </InputSelect>
+                    <label class="form-label" for="review">Nhận xét</label>
+                    <InputTextArea class="form-control mb-2" id="review" @bind-Value="DanhGia.NoiDung" />
+                    <button type="submit" class="btn btn-outline-primary align-self-start">Gửi đánh giá</button>
+                </EditForm>
+            </Authorized>
+        </AuthorizeView>
+    </section>
+    </NotAuthorized>
+    </AuthorizeView>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private XeMayModel? Xe { get; set; }
+    private List<DanhGiaXe> DanhGias { get; set; } = [];
+    private DanhGiaXe DanhGia { get; set; } = new();
+    private bool DangTai { get; set; } = true;
+    private string? ThongBao { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        DangTai = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        Xe = await db.XeMays.AsNoTracking().SingleOrDefaultAsync(x => x.Id == Id && x.DangKinhDoanh);
+        if (Xe is not null)
+        {
+            DanhGias = await db.DanhGiaXes.AsNoTracking().Where(x => x.XeMayId == Id)
+                .OrderByDescending(x => x.NgayTao).Take(50).ToListAsync();
+        }
+
+        DangTai = false;
+    }
+
+    private void ThemVaoGio()
+    {
+        GioHang.Them(Id);
+        ThongBao = "Đã thêm xe vào giỏ hàng.";
+    }
+
+    private void MuaNgay()
+    {
+        GioHang.Them(Id);
+        Navigation.NavigateTo("/gio-hang");
+    }
+
+    private void ThemSoSanh()
+    {
+        try
+        {
+            SoSanh.Them(Id);
+            Navigation.NavigateTo("/so-sanh");
+        }
+        catch (InvalidOperationException exception)
+        {
+            ThongBao = exception.Message;
+        }
+    }
+
+    private async Task ThemYeuThichAsync()
+    {
+        var authentication = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(authentication.User);
+        if (user is null)
+        {
+            Navigation.NavigateTo("/dang-nhap");
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (!await db.XeYeuThichs.AnyAsync(x => x.NguoiDungId == user.Id && x.XeMayId == Id))
+        {
+            db.XeYeuThichs.Add(new XeYeuThich { NguoiDungId = user.Id, XeMayId = Id });
+            await db.SaveChangesAsync();
+        }
+
+        ThongBao = "Đã lưu xe vào danh sách yêu thích.";
+    }
+
+    private async Task GuiDanhGiaAsync()
+    {
+        var authentication = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(authentication.User);
+        if (user is null)
+        {
+            Navigation.NavigateTo("/dang-nhap");
+            return;
+        }
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var purchased = await db.ChiTietDonHangs
+                .Join(db.DonHangs, item => item.DonHangId, order => order.Id, (item, order) => new { item, order })
+                .AnyAsync(x => x.item.XeMayId == Id && x.order.NguoiDungId == user.Id && x.order.TrangThai == "HoanThanh");
+            if (!purchased)
+            {
+                ThongBao = "Chỉ khách hàng đã mua và nhận xe mới có thể đánh giá.";
+                return;
+            }
+
+            DanhGia.NguoiDungId = user.Id;
+            DanhGia.XeMayId = Id;
+            db.DanhGiaXes.Add(DanhGia);
+            await db.SaveChangesAsync();
+            DanhGias.Insert(0, DanhGia);
+            DanhGia = new DanhGiaXe();
+            ThongBao = "Cảm ơn bạn đã đánh giá sản phẩm.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Không thể lưu đánh giá cho xe {XeId}.", Id);
+            ThongBao = "Không thể lưu đánh giá lúc này.";
+        }
+    }
+}

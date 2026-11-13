@@ -1,0 +1,32 @@
+<Router AppAssembly="@typeof(Program).Assembly">
+    <Found Context="routeData">
+        @if (routeData.PageType.Name == "DangNhap")
+        {
+            <RouteView RouteData="@routeData" DefaultLayout="@typeof(AuthLayout)" />
+        }
+        else
+        {
+            var chosenLayout = routeData.PageType.FullName?.Contains(".Admin.", StringComparison.Ordinal) == true
+                ? typeof(AdminLayout)
+                : typeof(UserLayout);
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@chosenLayout">
+                <NotAuthorized>
+                    <div class="container py-5 text-center">
+                        <h1 class="h3">Bạn cần đăng nhập để tiếp tục</h1>
+                        <a class="btn btn-primary mt-3" href="/dang-nhap">Đăng nhập</a>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeRouteView>
+        }
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>Không tìm thấy trang</PageTitle>
+        <LayoutView Layout="@typeof(UserLayout)">
+            <div class="container mt-5 text-center">
+                <h3>Đường dẫn không tồn tại!</h3>
+                <a href="" class="btn btn-primary mt-3">Quay lại trang chủ</a>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>

@@ -1,0 +1,202 @@
+@page "/tai-khoan"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using BlazorXe_Xemay.Features.Shared
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<AppUser> UserManager
+@inject DichVuKhachHang DichVuKhachHang
+@inject ILogger<TaiKhoanCuaToi> Logger
+
+<PageTitle>Tài khoản của tôi - MotoHub</PageTitle>
+<h1 class="h2 mb-4">Tài khoản của tôi</h1>
+
+@if (ThongBao is not null)
+{
+    <div class="alert @(ThanhCong ? "alert-success" : "alert-danger")" role="status">@ThongBao</div>
+}
+@if (NguoiDung is not null)
+{
+    <div class="row g-4">
+        <section class="col-lg-6">
+            <div class="card border-0 shadow-sm p-4">
+                <h2 class="h5">Thông tin cá nhân</h2>
+                <EditForm Model="HoSo" OnValidSubmit="LuuHoSoAsync">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary class="text-danger" />
+                    <label class="form-label" for="full-name">Họ và tên</label>
+                    <InputText id="full-name" class="form-control mb-3" @bind-Value="HoSo.HoTen" />
+                    <label class="form-label" for="account-email">Email</label>
+                    <input id="account-email" class="form-control mb-3" value="@NguoiDung.Email" readonly />
+                    <button class="btn btn-primary" type="submit">Lưu thay đổi</button>
+                </EditForm>
+            </div>
+            <div class="card border-0 shadow-sm p-4 mt-4">
+                <h2 class="h5">Đổi mật khẩu</h2>
+                <EditForm Model="MatKhau" OnValidSubmit="DoiMatKhauAsync">
+                    <DataAnnotationsValidator />
+                    <label class="form-label" for="old-password">Mật khẩu hiện tại</label>
+                    <div class="input-group mb-3"><InputText id="old-password" class="form-control" type="@(ShowCurrentPassword ? "text" : "password")" autocomplete="current-password" @bind-Value="MatKhau.MatKhauCu" /><button class="btn btn-outline-secondary password-toggle" type="button" aria-label="@(ShowCurrentPassword ? "Ẩn mật khẩu hiện tại" : "Hiện mật khẩu hiện tại")" aria-pressed="@ShowCurrentPassword" @onclick="() => ShowCurrentPassword = !ShowCurrentPassword">@(ShowCurrentPassword ? "Ẩn" : "Hiện")</button></div>
+                    <label class="form-label" for="new-password">Mật khẩu mới</label>
+                    <div class="input-group mb-3"><InputText id="new-password" class="form-control" type="@(ShowNewPassword ? "text" : "password")" autocomplete="new-password" @bind-Value="MatKhau.MatKhauMoi" /><button class="btn btn-outline-secondary password-toggle" type="button" aria-label="@(ShowNewPassword ? "Ẩn mật khẩu mới" : "Hiện mật khẩu mới")" aria-pressed="@ShowNewPassword" @onclick="() => ShowNewPassword = !ShowNewPassword">@(ShowNewPassword ? "Ẩn" : "Hiện")</button></div>
+                    <label class="form-label" for="confirm-password">Xác nhận mật khẩu mới</label>
+                    <div class="input-group mb-3"><InputText id="confirm-password" class="form-control" type="@(ShowConfirmPassword ? "text" : "password")" autocomplete="new-password" @bind-Value="MatKhau.XacNhan" /><button class="btn btn-outline-secondary password-toggle" type="button" aria-label="@(ShowConfirmPassword ? "Ẩn mật khẩu xác nhận" : "Hiện mật khẩu xác nhận")" aria-pressed="@ShowConfirmPassword" @onclick="() => ShowConfirmPassword = !ShowConfirmPassword">@(ShowConfirmPassword ? "Ẩn" : "Hiện")</button></div>
+                    <button class="btn btn-outline-primary" type="submit">Cập nhật mật khẩu</button>
+                </EditForm>
+            </div>
+        </section>
+        <section class="col-lg-6">
+            <div class="card border-0 shadow-sm p-4">
+                <h2 class="h5">Sổ địa chỉ</h2>
+                @if (DiaChis.Count == 0)
+                {
+                    <p class="text-secondary">Bạn chưa lưu địa chỉ nhận xe.</p>
+                }
+                @foreach (var address in DiaChis)
+                {
+                    <div class="border rounded p-3 mb-2">
+                        <strong>@address.NguoiNhan</strong>
+                        @if (address.MacDinh)
+                        {
+                            <span class="badge text-bg-primary ms-2">Mặc định</span>
+                        }
+                        <div>@address.SoDienThoai</div>
+                        <div>@address.DiaChi</div>
+                        <button class="btn btn-sm btn-link text-danger px-0" @onclick="() => XoaDiaChiAsync(address.Id)">Xóa địa chỉ</button>
+                    </div>
+                }
+                <EditForm Model="DiaChiMoi" OnValidSubmit="ThemDiaChiAsync" class="border-top pt-3 mt-3">
+                    <DataAnnotationsValidator />
+                    <label class="form-label" for="address-recipient">Người nhận</label>
+                    <InputText id="address-recipient" class="form-control mb-2" @bind-Value="DiaChiMoi.NguoiNhan" />
+                    <label class="form-label" for="address-phone">Số điện thoại</label>
+                    <InputText id="address-phone" class="form-control mb-2" @bind-Value="DiaChiMoi.SoDienThoai" />
+                    <label class="form-label" for="address-line">Địa chỉ</label>
+                    <InputText id="address-line" class="form-control mb-2" @bind-Value="DiaChiMoi.DiaChi" />
+                    <div class="form-check mb-3">
+                        <InputCheckbox id="address-default" class="form-check-input" @bind-Value="DiaChiMoi.MacDinh" />
+                        <label class="form-check-label" for="address-default">Đặt làm địa chỉ mặc định</label>
+                    </div>
+                    <button class="btn btn-outline-primary" type="submit">Thêm địa chỉ</button>
+                </EditForm>
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    private AppUser? NguoiDung { get; set; }
+    private ProfileForm HoSo { get; set; } = new();
+    private PasswordForm MatKhau { get; set; } = new();
+    private bool ShowCurrentPassword { get; set; }
+    private bool ShowNewPassword { get; set; }
+    private bool ShowConfirmPassword { get; set; }
+    private DiaChiKhachHang DiaChiMoi { get; set; } = new();
+    private List<DiaChiKhachHang> DiaChis { get; set; } = [];
+    private string? ThongBao { get; set; }
+    private bool ThanhCong { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        NguoiDung = await UserManager.GetUserAsync(state.User);
+        if (NguoiDung is null)
+        {
+            return;
+        }
+
+        HoSo.HoTen = NguoiDung.HoTen;
+        DiaChis = await DichVuKhachHang.LayDiaChiAsync(NguoiDung.Id);
+    }
+
+    private async Task LuuHoSoAsync()
+    {
+        if (NguoiDung is null)
+        {
+            return;
+        }
+
+        NguoiDung.HoTen = HoSo.HoTen.Trim();
+        var result = await UserManager.UpdateAsync(NguoiDung);
+        HienThiKetQua(result.Succeeded, result.Errors.Select(x => x.Description));
+    }
+
+    private async Task DoiMatKhauAsync()
+    {
+        if (NguoiDung is null || MatKhau.MatKhauMoi != MatKhau.XacNhan)
+        {
+            HienThiKetQua(false, ["Mật khẩu xác nhận không khớp."]);
+            return;
+        }
+
+        var result = await UserManager.ChangePasswordAsync(NguoiDung, MatKhau.MatKhauCu, MatKhau.MatKhauMoi);
+        HienThiKetQua(result.Succeeded, result.Errors.Select(x => x.Description));
+        if (result.Succeeded)
+        {
+            MatKhau = new PasswordForm();
+        }
+    }
+
+    private async Task ThemDiaChiAsync()
+    {
+        if (NguoiDung is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await DichVuKhachHang.LuuDiaChiAsync(NguoiDung.Id, DiaChiMoi);
+            DiaChiMoi = new DiaChiKhachHang();
+            DiaChis = await DichVuKhachHang.LayDiaChiAsync(NguoiDung.Id);
+            HienThiKetQua(true, ["Đã lưu địa chỉ."]);
+        }
+        catch (InvalidOperationException exception)
+        {
+            HienThiKetQua(false, [exception.Message]);
+        }
+    }
+
+    private async Task XoaDiaChiAsync(int addressId)
+    {
+        if (NguoiDung is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await DichVuKhachHang.XoaDiaChiAsync(NguoiDung.Id, addressId);
+            DiaChis = await DichVuKhachHang.LayDiaChiAsync(NguoiDung.Id);
+            HienThiKetQua(true, ["Đã xóa địa chỉ."]);
+        }
+        catch (InvalidOperationException exception)
+        {
+            HienThiKetQua(false, [exception.Message]);
+        }
+    }
+
+    private void HienThiKetQua(bool success, IEnumerable<string> messages)
+    {
+        ThanhCong = success;
+        ThongBao = string.Join(" ", messages);
+    }
+
+    private sealed class ProfileForm
+    {
+        [Required, StringLength(100)]
+        public string HoTen { get; set; } = string.Empty;
+    }
+
+    private sealed class PasswordForm
+    {
+        [Required]
+        public string MatKhauCu { get; set; } = string.Empty;
+
+        [Required, MinLength(10)]
+        public string MatKhauMoi { get; set; } = string.Empty;
+
+        [Required, Compare(nameof(MatKhauMoi))]
+        public string XacNhan { get; set; } = string.Empty;
+    }
+}

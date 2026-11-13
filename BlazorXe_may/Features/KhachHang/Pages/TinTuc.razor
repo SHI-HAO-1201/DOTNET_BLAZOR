@@ -1,0 +1,43 @@
+@page "/tin-tuc"
+@using BlazorXe_Xemay.Features.Shared
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Tạp chí MotoHub</PageTitle>
+
+<section class="content-masthead content-masthead--journal">
+    <span class="showroom-eyebrow">THE MOTOHUB JOURNAL · VOL. 01</span>
+    <h1>Chuyện xe,<br /><em>chuyện những cung đường.</em></h1>
+    <p>Kinh nghiệm chọn xe, kiến thức chăm sóc và cảm hứng cho hành trình tiếp theo — được biên soạn bởi MotoHub.</p>
+</section>
+
+<section class="content-section">
+    <div class="d-flex justify-content-between align-items-end mb-4"><div><span class="showroom-eyebrow">GÓC ĐỌC CỦA BẠN</span><h2 class="h3 mb-0">Bài viết mới nhất</h2></div><a href="/bo-suu-tap">Đọc câu chuyện bộ sưu tập ↗</a></div>
+    @if (BaiViets.Count == 0)
+    {
+        <div class="card card-body"><h3 class="h5">Bài viết đang được biên tập</h3><p class="mb-0">Trong lúc chờ số tiếp theo, hãy xem hướng dẫn chọn xe và thông tin mẫu xe trong bộ sưu tập MotoHub.</p></div>
+    }
+    else
+    {
+        <div class="journal-list">
+            @foreach (var article in BaiViets)
+            {
+                <article class="journal-card">
+                    <div class="journal-card__meta"><span>@article.Loai</span><time>@article.NgayTao.ToLocalTime().ToString("dd.MM.yyyy")</time></div>
+                    <div><h2>@article.TieuDe</h2><p class="journal-card__summary">@article.TomTat</p><details><summary>Đọc bài viết</summary><p class="journal-card__content">@article.NoiDung</p></details></div>
+                    <span class="journal-card__arrow" aria-hidden="true">↗</span>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private List<BaiViet> BaiViets { get; set; } = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        BaiViets = await db.BaiViets.AsNoTracking().Where(x => x.DaXuatBan)
+            .OrderByDescending(x => x.NgayTao).ToListAsync();
+    }
+}

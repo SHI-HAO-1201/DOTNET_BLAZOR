@@ -1,0 +1,1310 @@
+@page "/admin"
+@page "/admin/{Module}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "QuanTriVien,ChuCuaHang,QuanLy,BanHang,Kho,KeToan,BaoHanh,NhanVien")]
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using BlazorXe_Xemay.Features.DonHang
+@using BlazorXe_Xemay.Features.Shared
+@using BlazorXe_Xemay.Features.TaiKhoan
+@using BlazorXe_Xemay.Features.XeMay.Models
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using DonHangEntity = BlazorXe_Xemay.Features.TaiKhoan.DonHang
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<AppUser> UserManager
+@inject RoleManager<IdentityRole<int>> RoleManager
+@inject XeMayService XeMayService
+@inject DichVuPhanQuyen PermissionService
+@inject DichVuQuanTri DichVuQuanTri
+@inject DichVuDonHang DichVuDonHang
+@inject DichVuNhatKy DichVuNhatKy
+@inject ILogger<AdminPanel> Logger
+
+<PageTitle>@TenTrang - MotoHub quản trị</PageTitle>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-1">@TenTrang</h1>
+        <p class="text-secondary mb-0">Quản lý hoạt động cửa hàng và dữ liệu nghiệp vụ.</p>
+    </div>
+    <span class="badge text-bg-light">@NguoiDung?.Email</span>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(ThongBao))
+{
+    <div class="alert @(ThanhCong ? "alert-success" : "alert-danger")" role="status">@ThongBao</div>
+}
+@if (DangTai)
+{
+    <div class="alert alert-info">Đang tải dữ liệu...</div>
+}
+else if (!CoQuyen)
+{
+    <div class="alert alert-warning">Tài khoản của bạn chưa được cấp quyền xem phân hệ này.</div>
+}
+else
+{
+    @switch (ModuleHienTai)
+    {
+        case "dashboard":
+            <section class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-3 mb-4">
+                <div class="col"><div class="stat-card"><span>Xe đang kinh doanh</span><strong>@(ThongKe?.SoXe ?? 0)</strong></div></div>
+                <div class="col"><div class="stat-card"><span>Đơn chờ xác nhận</span><strong>@(ThongKe?.DonChoXacNhan ?? 0)</strong></div></div>
+                <div class="col"><div class="stat-card"><span>Tài khoản khách hàng</span><strong>@(ThongKe?.KhachHang ?? 0)</strong></div></div>
+                <div class="col"><div class="stat-card"><span>Yêu cầu bảo hành mở</span><strong>@(ThongKe?.YeuCauBaoHanh ?? 0)</strong></div></div>
+            </section>
+            <div class="card border-0 shadow-sm p-3">
+                <h2 class="h5">Đơn hàng gần đây</h2>
+                @RenderOrders(ThongKe?.DonHangMoiNhat ?? [])
+            </div>
+            break;
+        case "san-pham":
+            <div class="row g-4">
+                <section class="col-xl-4">
+                    <EditForm Model="XeForm" OnValidSubmit="LuuXeAsync" class="card border-0 shadow-sm p-3">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+                        <h2 class="h5">@(XeForm.Id == 0 ? "Thêm xe mới" : $"Sửa {XeForm.TenXe}")</h2>
+                        <label class="form-label">Mã xe</label><InputText class="form-control mb-2" @bind-Value="XeForm.MaXe" />
+                        <label class="form-label">Tên xe</label><InputText class="form-control mb-2" @bind-Value="XeForm.TenXe" />
+                        <label class="form-label">Hãng xe</label><InputText class="form-control mb-2" @bind-Value="XeForm.HangXe" />
+                        <label class="form-label">Loại xe</label><InputText class="form-control mb-2" @bind-Value="XeForm.LoaiXe" />
+                        <label class="form-label">Giá niêm yết</label><InputNumber class="form-control mb-2" min="0" @bind-Value="XeForm.GiaNiemYet" />
+                        <label class="form-label">Giá bán</label><InputNumber class="form-control mb-2" min="0" @bind-Value="XeForm.GiaBan" />
+                        <label class="form-label">Ảnh sản phẩm (URL)</label><InputText class="form-control mb-2" @bind-Value="XeForm.HinhAnh" />
+                        <label class="form-label">Mô tả</label><InputTextArea class="form-control mb-2" @bind-Value="XeForm.MoTa" />
+                        <div class="form-check mb-3"><InputCheckbox class="form-check-input" @bind-Value="XeForm.DangKinhDoanh" /><label class="form-check-label">Đang kinh doanh</label></div>
+                        <div class="d-flex gap-2"><button class="btn btn-primary" type="submit">Lưu xe</button><button class="btn btn-outline-secondary" type="button" @onclick="DatLaiFormXe">Làm mới</button></div>
+                    </EditForm>
+                </section>
+                <section class="col-xl-8">
+                    <div class="table-responsive card border-0 shadow-sm p-2">
+                        <table class="table table-striped align-middle">
+                            <thead><tr><th>Mã xe</th><th>Tên xe</th><th>Hãng</th><th>Giá</th><th>Tồn</th><th>Trạng thái</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var xe in DanhSachXe)
+                                {
+                                    <tr>
+                                        <td>@xe.MaXe</td><td>@xe.TenXe</td><td>@xe.HangXe</td><td>@xe.GiaBan.ToString("N0") ₫</td><td>@xe.SoLuong</td><td>@(xe.DangKinhDoanh ? "Đang bán" : "Đã ẩn")</td>
+                                        <td class="text-nowrap"><button class="btn btn-sm btn-outline-primary" @onclick="() => ChonXe(xe)">Sửa</button>
+                                            @if (xe.DangKinhDoanh)
+                                            {
+                                                <button class="btn btn-sm btn-outline-danger ms-1" @onclick="() => NgungKinhDoanhAsync(xe.Id)">Ẩn</button>
+                                            }
+                                            else
+                                            {
+                                                <button class="btn btn-sm btn-outline-success ms-1" @onclick="() => MoKinhDoanhAsync(xe.Id)">Mở bán</button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+            break;
+        case "don-hang":
+            @RenderOrders(DonHangs)
+            break;
+        case "kho":
+            <div class="row g-4">
+                <section class="col-lg-4">
+                    <EditForm Model="DieuChinhKho" OnValidSubmit="CapNhatKhoAsync" class="card card-body border-0 shadow-sm">
+                        <DataAnnotationsValidator />
+                        <h2 class="h5">Điều chỉnh tồn kho</h2>
+                        <label class="form-label">Xe</label>
+                        <InputSelect class="form-select mb-2" @bind-Value="DieuChinhKho.XeMayId"><option value="0">Chọn xe</option>@foreach (var xe in DanhSachXe.Where(x => x.DangKinhDoanh)) { <option value="@xe.Id">@xe.TenXe (còn @xe.SoLuong)</option> }</InputSelect>
+                        <label class="form-label">Chi nhánh</label>
+                        <InputSelect class="form-select mb-2" @bind-Value="DieuChinhKho.ChiNhanhId"><option value="0">Chọn chi nhánh</option>@foreach (var branch in ChiNhanhs) { <option value="@branch.Id">@branch.TenChiNhanh</option> }</InputSelect>
+                        <label class="form-label">Số lượng thay đổi (số âm để xuất)</label><InputNumber class="form-control mb-2" @bind-Value="DieuChinhKho.SoLuong" />
+                        <label class="form-label">Nhà cung cấp (khi nhập hàng)</label>
+                        <InputSelect class="form-select mb-2" @bind-Value="DieuChinhKho.NhaCungCapId"><option value="">Không áp dụng</option>@foreach (var supplier in NhaCungCaps) { <option value="@supplier.Id">@supplier.TenNhaCungCap</option> }</InputSelect>
+                        <label class="form-label">Lý do</label><InputText class="form-control mb-3" @bind-Value="DieuChinhKho.GhiChu" />
+                        <button class="btn btn-primary" type="submit">Ghi nhận biến động</button>
+                    </EditForm>
+                    <EditForm Model="ChuyenKhoForm" OnValidSubmit="ChuyenKhoAsync" class="card card-body border-0 shadow-sm mt-3">
+                        <DataAnnotationsValidator />
+                        <h2 class="h5">Chuyển xe giữa chi nhánh</h2>
+                        <label class="form-label">Xe</label>
+                        <InputSelect class="form-select mb-2" @bind-Value="ChuyenKhoForm.XeMayId"><option value="0">Chọn xe</option>@foreach (var xe in DanhSachXe.Where(x => x.DangKinhDoanh)) { <option value="@xe.Id">@xe.TenXe</option> }</InputSelect>
+                        <label class="form-label">Từ chi nhánh</label>
+                        <InputSelect class="form-select mb-2" @bind-Value="ChuyenKhoForm.TuChiNhanhId"><option value="0">Chọn nguồn</option>@foreach (var branch in ChiNhanhs) { <option value="@branch.Id">@branch.TenChiNhanh</option> }</InputSelect>
+                        <label class="form-label">Đến chi nhánh</label>
+                        <InputSelect class="form-select mb-2" @bind-Value="ChuyenKhoForm.DenChiNhanhId"><option value="0">Chọn đích</option>@foreach (var branch in ChiNhanhs) { <option value="@branch.Id">@branch.TenChiNhanh</option> }</InputSelect>
+                        <label class="form-label">Số lượng</label><InputNumber class="form-control mb-3" min="1" @bind-Value="ChuyenKhoForm.SoLuong" />
+                        <button class="btn btn-outline-primary" type="submit">Chuyển kho</button>
+                    </EditForm>
+                </section>
+                <section class="col-lg-8"><h2 class="h5">Lịch sử nhập / xuất / kiểm kê</h2>
+                    <div class="table-responsive"><table class="table table-sm table-striped"><thead><tr><th>Ngày</th><th>Xe</th><th>Chi nhánh</th><th>Loại</th><th>Số lượng</th><th>Ghi chú</th></tr></thead><tbody>
+                        @foreach (var movement in BienDongKhos) { <tr><td>@movement.NgayTao.ToLocalTime().ToString("g")</td><td>@movement.TenXe</td><td>@movement.TenChiNhanh</td><td>@movement.LoaiGiaoDich</td><td>@movement.SoLuongThayDoi</td><td>@movement.GhiChu</td></tr> }
+                    </tbody></table></div>
+                </section>
+            </div>
+            break;
+        case "ban-hang":
+            <div class="row g-4">
+                <section class="col-lg-5">
+                    <EditForm Model="BanHangTaiQuay" OnValidSubmit="TaoDonTaiQuayAsync" class="card card-body border-0 shadow-sm">
+                        <DataAnnotationsValidator />
+                        <h2 class="h5">Tạo đơn bán tại cửa hàng</h2>
+                        <label class="form-label">Chi nhánh bán</label>
+                        <InputSelect class="form-select mb-2" @bind-Value="BanHangTaiQuay.ChiNhanhId"><option value="0">Chọn chi nhánh</option>@foreach (var branch in ChiNhanhs) { <option value="@branch.Id">@branch.TenChiNhanh</option> }</InputSelect>
+                        <label class="form-label">Khách hàng</label>
+                        <InputSelect class="form-select mb-2" @bind-Value="BanHangTaiQuay.KhachHangId"><option value="0">Chọn khách hàng</option>@foreach (var customer in KhachHangs) { <option value="@customer.Id">@customer.HoTen — @customer.Email</option> }</InputSelect>
+                        <label class="form-label">Xe</label>
+                        <InputSelect class="form-select mb-2" @bind-Value="BanHangTaiQuay.XeMayId"><option value="0">Chọn xe</option>@foreach (var xe in DanhSachXe.Where(x => x.DangKinhDoanh && x.SoLuong > 0)) { <option value="@xe.Id">@xe.TenXe — @xe.GiaBan.ToString("N0") ₫</option> }</InputSelect>
+                        <label class="form-label">Số lượng</label><InputNumber class="form-control mb-2" min="1" @bind-Value="BanHangTaiQuay.SoLuong" />
+                        <label class="form-label">Người nhận</label><InputText class="form-control mb-2" @bind-Value="BanHangTaiQuay.NguoiNhan" />
+                        <label class="form-label">Điện thoại</label><InputText class="form-control mb-2" @bind-Value="BanHangTaiQuay.SoDienThoai" />
+                        <label class="form-label">Địa chỉ</label><InputText class="form-control mb-3" @bind-Value="BanHangTaiQuay.DiaChi" />
+                        <button class="btn btn-primary" type="submit">Tạo đơn tại quầy</button>
+                    </EditForm>
+                </section>
+                <section class="col-lg-7"><p>Đơn bán tại quầy được ghi nhận trong lịch sử đơn hàng, trừ tồn kho và lưu giao dịch thanh toán tiền mặt.</p></section>
+            </div>
+            break;
+        case "khach-hang":
+            <div class="table-responsive"><table class="table table-striped align-middle"><thead><tr><th>Họ tên</th><th>Email</th><th>Điện thoại</th><th>Ngày tạo</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
+                @foreach (var customer in KhachHangs) { <tr><td>@customer.HoTen</td><td>@customer.Email</td><td>@(string.IsNullOrWhiteSpace(customer.PhoneNumber) ? "Chưa cập nhật" : customer.PhoneNumber)</td><td>@customer.NgayTao.ToLocalTime().ToString("dd/MM/yyyy")</td><td><span class="badge @(customer.DangHoatDong ? "text-bg-success" : "text-bg-secondary")">@(customer.DangHoatDong ? "Hoạt động" : "Đã khóa")</span></td><td class="text-nowrap"><button class="btn btn-sm btn-outline-primary me-1" @onclick="() => XemKhachHangAsync(customer)">Xem tài khoản</button><button class="btn btn-sm btn-outline-secondary" @onclick="() => DoiTrangThaiNguoiDungAsync(customer)">@((customer.DangHoatDong) ? "Khóa" : "Mở khóa")</button></td></tr> }
+            </tbody></table></div>
+            @if (KhachHangDangXem is not null)
+            {
+                <section class="card card-body mt-4">
+                    <div class="d-flex justify-content-between align-items-start gap-3">
+                        <div><span class="admin-nav-label">HỒ SƠ KHÁCH HÀNG</span><h2 class="h5 mt-1">@KhachHangDangXem.HoTen</h2></div>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="DongHoSoKhachHang">Đóng</button>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3"><span class="text-secondary small">Email</span><div>@KhachHangDangXem.Email</div></div>
+                        <div class="col-md-3"><span class="text-secondary small">Điện thoại</span><div>@(KhachHangDangXem.PhoneNumber ?? "Chưa cập nhật")</div></div>
+                        <div class="col-md-3"><span class="text-secondary small">Tạo tài khoản</span><div>@KhachHangDangXem.NgayTao.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div></div>
+                        <div class="col-md-3"><span class="text-secondary small">Xác minh email</span><div>@(KhachHangDangXem.EmailConfirmed ? "Đã xác minh" : "Chưa xác minh")</div></div>
+                    </div>
+                    <h3 class="h6">Lịch sử đặt hàng (@DonHangKhachDangXem.Count)</h3>
+                    @if (DonHangKhachDangXem.Count == 0)
+                    {
+                        <p class="text-secondary mb-0">Khách hàng chưa có đơn hàng.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Mã đơn</th><th>Ngày đặt</th><th>Sản phẩm</th><th>Tổng tiền</th><th>Trạng thái</th></tr></thead><tbody>
+                            @foreach (var order in DonHangKhachDangXem)
+                            {
+                                <tr><td>@order.MaDonHang</td><td>@order.NgayTao.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td><td>@string.Join(", ", order.ChiTiet.Select(item => $"{item.TenXe} × {item.SoLuong}"))</td><td>@order.TongTien.ToString("N0") ₫</td><td>@order.TrangThai</td></tr>
+                            }
+                        </tbody></table></div>
+                    }
+                </section>
+            }
+            break;
+        case "nha-cung-cap":
+            <div class="row g-3"><div class="col-lg-4">
+                <EditForm Model="NhaCungCapForm" OnValidSubmit="ThemNhaCungCapAsync" class="card card-body">
+                    <DataAnnotationsValidator /><h2 class="h5">Thêm nhà cung cấp</h2>
+                    <label class="form-label">Mã nhà cung cấp</label><InputText class="form-control mb-2" @bind-Value="NhaCungCapForm.MaNhaCungCap" />
+                    <label class="form-label">Tên</label><InputText class="form-control mb-2" @bind-Value="NhaCungCapForm.TenNhaCungCap" />
+                    <label class="form-label">Người liên hệ</label><InputText class="form-control mb-2" @bind-Value="NhaCungCapForm.NguoiLienHe" />
+                    <label class="form-label">Điện thoại</label><InputText class="form-control mb-2" @bind-Value="NhaCungCapForm.SoDienThoai" />
+                    <label class="form-label">Email</label><InputText class="form-control mb-3" @bind-Value="NhaCungCapForm.Email" />
+                    <button class="btn btn-primary">Lưu nhà cung cấp</button>
+                </EditForm>
+            </div><div class="col-lg-8"><div class="table-responsive"><table class="table"><thead><tr><th>Mã</th><th>Tên</th><th>Liên hệ</th><th>Điện thoại</th></tr></thead><tbody>@foreach (var supplier in NhaCungCaps) { <tr><td>@supplier.MaNhaCungCap</td><td>@supplier.TenNhaCungCap</td><td>@supplier.NguoiLienHe</td><td>@supplier.SoDienThoai</td></tr> }</tbody></table></div></div></div>
+            break;
+        case "khuyen-mai":
+            <div class="row g-3"><div class="col-lg-4">
+                <EditForm Model="KhuyenMaiForm" OnValidSubmit="LuuKhuyenMaiAsync" class="card card-body">
+                    <DataAnnotationsValidator /><h2 class="h5">@(KhuyenMaiForm.Id == 0 ? "Tạo mã khuyến mãi" : $"Sửa mã {KhuyenMaiForm.MaKhuyenMai}")</h2>
+                    <label class="form-label">Mã</label><InputText class="form-control mb-2" @bind-Value="KhuyenMaiForm.MaKhuyenMai" />
+                    <label class="form-label">Tên chương trình</label><InputText class="form-control mb-2" @bind-Value="KhuyenMaiForm.TenKhuyenMai" />
+                    <label class="form-label">Giá trị giảm</label><InputNumber class="form-control mb-2" min="0" @bind-Value="KhuyenMaiForm.GiaTri" />
+                    <div class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="KhuyenMaiForm.TheoPhanTram" /><label class="form-check-label">Giảm theo phần trăm</label></div>
+                    <label class="form-label">Đơn tối thiểu</label><InputNumber class="form-control mb-2" min="0" @bind-Value="KhuyenMaiForm.DonToiThieu" />
+                    <label class="form-label">Bắt đầu</label><InputDate class="form-control mb-2" @bind-Value="KhuyenMaiForm.BatDau" />
+                    <label class="form-label">Kết thúc</label><InputDate class="form-control mb-3" @bind-Value="KhuyenMaiForm.KetThuc" />
+                    <div class="form-check mb-3"><InputCheckbox class="form-check-input" @bind-Value="KhuyenMaiForm.DangHoatDong" /><label class="form-check-label">Đang áp dụng</label></div>
+                    <div class="d-flex gap-2"><button class="btn btn-primary">@(KhuyenMaiForm.Id == 0 ? "Tạo khuyến mãi" : "Lưu thay đổi")</button>@if (KhuyenMaiForm.Id != 0) { <button type="button" class="btn btn-outline-secondary" @onclick="DatLaiKhuyenMai">Hủy sửa</button> }</div>
+                </EditForm>
+            </div><div class="col-lg-8"><div class="table-responsive"><table class="table table-striped align-middle"><thead><tr><th>Mã</th><th>Tên</th><th>Giá trị</th><th>Thời hạn</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>@foreach (var promotion in KhuyenMais) { <tr><td><strong>@promotion.MaKhuyenMai</strong></td><td>@promotion.TenKhuyenMai</td><td>@promotion.GiaTri @(promotion.TheoPhanTram ? "%" : "₫")<div class="small text-secondary">Đơn tối thiểu @promotion.DonToiThieu.ToString("N0") ₫</div></td><td>@promotion.BatDau.ToLocalTime().ToString("d") – @promotion.KetThuc.ToLocalTime().ToString("d")</td><td><span class="badge @(promotion.DangHoatDong && promotion.KetThuc >= DateTime.UtcNow ? "text-bg-success" : "text-bg-secondary")">@(promotion.DangHoatDong && promotion.KetThuc >= DateTime.UtcNow ? "Đang áp dụng" : "Không hoạt động")</span></td><td class="text-nowrap"><button class="btn btn-sm btn-outline-primary me-1" @onclick="() => SuaKhuyenMai(promotion)">Sửa</button><button class="btn btn-sm btn-outline-danger" @onclick="() => XoaKhuyenMaiAsync(promotion.Id)">Xóa</button></td></tr> }</tbody></table></div></div></div>
+            break;
+        case "bao-hanh":
+            @RenderWarranty()
+            break;
+        case "ho-tro":
+            <div class="table-responsive"><table class="table table-striped"><thead><tr><th>Ngày</th><th>Khách hàng</th><th>Tiêu đề</th><th>Nội dung</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+                @foreach (var ticket in PhieuHoTros) { <tr><td>@ticket.NgayTao.ToLocalTime().ToString("g")</td><td>@(ticket.UserEmail ?? "Khách")</td><td>@ticket.TieuDe</td><td>@ticket.NoiDung</td><td>@ticket.TrangThai</td><td><button class="btn btn-sm btn-outline-primary" @onclick="() => CapNhatHoTroAsync(ticket.Id)">Đóng yêu cầu</button></td></tr> }
+            </tbody></table></div>
+            break;
+        case "noi-dung":
+            <div class="row g-3"><div class="col-lg-4"><EditForm Model="BaiVietForm" OnValidSubmit="ThemBaiVietAsync" class="card card-body">
+                <DataAnnotationsValidator /><h2 class="h5">Đăng tin/bài tư vấn</h2>
+                <label class="form-label">Tiêu đề</label><InputText class="form-control mb-2" @bind-Value="BaiVietForm.TieuDe" />
+                <label class="form-label">Tóm tắt</label><InputText class="form-control mb-2" @bind-Value="BaiVietForm.TomTat" />
+                <label class="form-label">Nội dung</label><InputTextArea class="form-control mb-2" rows="5" @bind-Value="BaiVietForm.NoiDung" />
+                <label class="form-label">Loại</label><InputSelect class="form-select mb-2" @bind-Value="BaiVietForm.Loai"><option value="TinTuc">Tin tức</option><option value="TuVan">Tư vấn</option><option value="ChinhSach">Chính sách</option></InputSelect>
+                <div class="form-check mb-3"><InputCheckbox class="form-check-input" @bind-Value="BaiVietForm.DaXuatBan" /><label class="form-check-label">Xuất bản</label></div>
+                <button class="btn btn-primary">Lưu bài viết</button>
+            </EditForm></div><div class="col-lg-8"><div class="table-responsive"><table class="table"><thead><tr><th>Tiêu đề</th><th>Loại</th><th>Trạng thái</th><th></th></tr></thead><tbody>@foreach (var article in BaiViets) { <tr><td>@article.TieuDe</td><td>@article.Loai</td><td>@(article.DaXuatBan ? "Đã đăng" : "Bản nháp")</td><td><button class="btn btn-sm btn-outline-secondary" @onclick="() => DoiTrangThaiBaiVietAsync(article)">@(article.DaXuatBan ? "Ẩn" : "Đăng")</button></td></tr> }</tbody></table></div></div></div>
+            break;
+        case "bao-cao":
+            <section class="row g-3">
+                <div class="col-md-4"><div class="stat-card"><span>Doanh thu đơn hoàn tất</span><strong>@(ThongKe?.DoanhThu.ToString("N0") ?? "0") ₫</strong></div></div>
+                <div class="col-md-4"><div class="stat-card"><span>Đơn hàng</span><strong>@DonHangs.Count</strong></div></div>
+                <div class="col-md-4"><div class="stat-card"><span>Xe đang kinh doanh</span><strong>@DanhSachXe.Count(x => x.DangKinhDoanh)</strong></div></div>
+            </section>
+            <h2 class="h5 mt-4">Hiệu quả sản phẩm đã bán</h2>
+            <div class="table-responsive"><table class="table"><thead><tr><th>Xe</th><th>Số lượng bán</th><th>Doanh thu</th></tr></thead><tbody>@foreach (var sales in BaoCaoSanPhams) { <tr><td>@sales.TenXe</td><td>@sales.SoLuong</td><td>@sales.DoanhThu.ToString("N0") ₫</td></tr> }</tbody></table></div>
+            break;
+        case "nhan-su":
+            <h2 class="h5">Nhân viên và vai trò</h2>
+            <div class="table-responsive"><table class="table table-striped"><thead><tr><th>Tài khoản</th><th>Họ tên</th><th>Vai trò</th><th>Phạm vi chi nhánh</th><th>Thao tác</th></tr></thead><tbody>
+                @foreach (var employee in NhanSu) { <tr><td>@employee.Email</td><td>@employee.HoTen</td><td>@string.Join(", ", VaiTroTheoNguoiDung.GetValueOrDefault(employee.Id, []))</td><td>@(employee.ChiNhanhId is int branchId ? ChiNhanhs.FirstOrDefault(x => x.Id == branchId)?.TenChiNhanh : "Chưa gán")</td><td><select class="form-select form-select-sm d-inline-block w-auto" @bind="VaiTroChon"><option value="">Chọn vai trò</option>@foreach (var role in VaiTros) { <option value="@role.Name">@role.Name</option> }</select> <button class="btn btn-sm btn-outline-primary" @onclick="() => GanVaiTroAsync(employee, true)">Gán</button> <button class="btn btn-sm btn-outline-danger" @onclick="() => GanVaiTroAsync(employee, false)">Thu hồi</button><div class="mt-2"><select class="form-select form-select-sm d-inline-block w-auto" @bind="ChiNhanhChon"><option value="0">Chọn chi nhánh</option>@foreach (var branch in ChiNhanhs) { <option value="@branch.Id">@branch.TenChiNhanh</option> }</select> <button class="btn btn-sm btn-outline-secondary" @onclick="() => GanChiNhanhAsync(employee, true)">Gán phạm vi</button><button class="btn btn-sm btn-link text-danger" @onclick="() => GanChiNhanhAsync(employee, false)">Thu hồi</button></div></td></tr> }
+            </tbody></table></div>
+            <h2 class="h5 mt-4">Ma trận quyền</h2>
+            <div class="table-responsive"><table class="table table-bordered"><thead><tr><th>Vai trò</th>@foreach (var permission in QuyenHeThongs) { <th>@permission.TenQuyen</th> }</tr></thead><tbody>
+                @foreach (var role in VaiTros.Where(x => x.Name != "QuanTriVien")) { <tr><th>@role.Name</th>@foreach (var permission in QuyenHeThongs) { <td><input type="checkbox" checked="@QuyenDaGan.Contains((role.Id, permission.Id))" @onchange="e => CapNhatQuyenAsync(role.Id, permission.Id, e)" aria-label="@($"{role.Name}: {permission.TenQuyen}")" /></td> }</tr> }
+            </tbody></table></div>
+            break;
+        case "chi-nhanh":
+            <div class="row g-4"><section class="col-lg-4"><EditForm Model="ChiNhanhForm" OnValidSubmit="ThemChiNhanhAsync" class="card card-body">
+                <DataAnnotationsValidator /><h2 class="h5">Thêm chi nhánh</h2>
+                <label class="form-label">Mã chi nhánh</label><InputText class="form-control mb-2" @bind-Value="ChiNhanhForm.MaChiNhanh" />
+                <label class="form-label">Tên</label><InputText class="form-control mb-2" @bind-Value="ChiNhanhForm.TenChiNhanh" />
+                <label class="form-label">Địa chỉ</label><InputText class="form-control mb-2" @bind-Value="ChiNhanhForm.DiaChi" />
+                <label class="form-label">Điện thoại</label><InputText class="form-control mb-3" @bind-Value="ChiNhanhForm.SoDienThoai" />
+                <button class="btn btn-primary">Lưu chi nhánh</button>
+            </EditForm></section><section class="col-lg-8"><div class="table-responsive"><table class="table"><thead><tr><th>Mã</th><th>Chi nhánh</th><th>Địa chỉ</th><th>Điện thoại</th><th>Trạng thái</th></tr></thead><tbody>@foreach (var branch in ChiNhanhs) { <tr><td>@branch.MaChiNhanh</td><td>@branch.TenChiNhanh</td><td>@branch.DiaChi</td><td>@branch.SoDienThoai</td><td>@(branch.DangHoatDong ? "Hoạt động" : "Đã đóng")</td></tr> }</tbody></table></div></section></div>
+            break;
+        case "thong-bao":
+            <EditForm Model="ThongBaoForm" OnValidSubmit="GuiThongBaoAsync" class="card card-body border-0 shadow-sm mb-4">
+                <DataAnnotationsValidator /><h2 class="h5">Gửi thông báo</h2>
+                <label class="form-label">Tiêu đề</label><InputText class="form-control mb-2" @bind-Value="ThongBaoForm.TieuDe" />
+                <label class="form-label">Nội dung</label><InputTextArea class="form-control mb-2" @bind-Value="ThongBaoForm.NoiDung" />
+                <label class="form-label">Tài khoản nhận (để trống gửi tất cả)</label><InputSelect class="form-select mb-3" @bind-Value="ThongBaoForm.NguoiDungId"><option value="">Tất cả khách hàng</option>@foreach (var customer in KhachHangs) { <option value="@customer.Id">@customer.Email</option> }</InputSelect>
+                <button class="btn btn-primary align-self-start">Gửi</button>
+            </EditForm>
+            <div class="table-responsive"><table class="table"><thead><tr><th>Ngày</th><th>Người nhận</th><th>Tiêu đề</th><th>Nội dung</th></tr></thead><tbody>@foreach (var notification in ThongBaos) { <tr><td>@notification.NgayTao.ToLocalTime().ToString("g")</td><td>@(notification.NguoiDungId?.ToString() ?? "Tất cả")</td><td>@notification.TieuDe</td><td>@notification.NoiDung</td></tr> }</tbody></table></div>
+            break;
+        case "nhat-ky":
+            <div class="table-responsive"><table class="table table-sm table-striped"><thead><tr><th>Thời gian</th><th>Tài khoản</th><th>Thao tác</th><th>Đối tượng</th><th>Chi tiết</th><th>IP</th></tr></thead><tbody>@foreach (var log in NhatKys) { <tr><td>@log.NgayTao.ToLocalTime().ToString("g")</td><td>@log.NguoiDungId</td><td>@log.HanhDong</td><td>@log.DoiTuong</td><td>@log.ChiTiet</td><td>@log.DiaChiIp</td></tr> }</tbody></table></div>
+            break;
+        case "cau-hinh":
+            <EditForm Model="CauHinhForm" OnValidSubmit="LuuCauHinhAsync" class="card card-body border-0 shadow-sm mb-4">
+                <DataAnnotationsValidator /><h2 class="h5">Cấu hình cửa hàng</h2>
+                <label class="form-label">Khóa cấu hình</label><InputText class="form-control mb-2" @bind-Value="CauHinhForm.Khoa" />
+                <label class="form-label">Giá trị</label><InputText class="form-control mb-3" @bind-Value="CauHinhForm.GiaTri" />
+                <button class="btn btn-primary align-self-start">Lưu cấu hình</button>
+            </EditForm>
+            <div class="table-responsive"><table class="table"><thead><tr><th>Khóa</th><th>Giá trị</th></tr></thead><tbody>@foreach (var setting in CauHinhs) { <tr><td>@setting.Khoa</td><td>@setting.GiaTri</td><td><button class="btn btn-sm btn-link" @onclick="() => ChonCauHinh(setting)">Sửa</button></td></tr> }</tbody></table></div>
+            break;
+        default:
+            <div class="alert alert-warning">Phân hệ không tồn tại. Hãy chọn một mục trong menu quản trị.</div>
+            break;
+    }
+}
+
+@code {
+    [Parameter] public string? Module { get; set; }
+    [SupplyParameterFromQuery(Name = "xeId")]
+    public int? XeId { get; set; }
+
+    private string ModuleHienTai => string.IsNullOrWhiteSpace(Module) ? "dashboard" : Module.ToLowerInvariant();
+    private string TenTrang => ModuleHienTai switch
+    {
+        "dashboard" => "Tổng quan cửa hàng",
+        "san-pham" => "Quản lý sản phẩm",
+        "don-hang" => "Quản lý đơn hàng & thanh toán",
+        "ban-hang" => "Bán hàng tại quầy",
+        "kho" => "Quản lý kho",
+        "khach-hang" => "Quản lý khách hàng",
+        "nha-cung-cap" => "Nhà cung cấp",
+        "khuyen-mai" => "Khuyến mãi",
+        "bao-hanh" => "Bảo hành và bảo dưỡng",
+        "ho-tro" => "Yêu cầu hỗ trợ",
+        "noi-dung" => "Quản lý nội dung",
+        "bao-cao" => "Báo cáo kinh doanh",
+        "nhan-su" => "Nhân sự & phân quyền",
+        "chi-nhanh" => "Quản lý chi nhánh",
+        "thong-bao" => "Thông báo",
+        "nhat-ky" => "Nhật ký hệ thống",
+        "cau-hinh" => "Cấu hình cửa hàng",
+        _ => "Quản trị cửa hàng"
+    };
+
+    private string MaQuyen => ModuleHienTai switch
+    {
+        "san-pham" => "products.view",
+        "kho" => "inventory.view",
+        "don-hang" or "ban-hang" => "orders.view",
+        "khach-hang" => "customers.view",
+        "nha-cung-cap" => "inventory.manage",
+        "khuyen-mai" or "noi-dung" => "products.manage",
+        "bao-hanh" => "warranty.manage",
+        "bao-cao" => "reports.view",
+        "nhan-su" => "roles.manage",
+        "chi-nhanh" or "thong-bao" or "nhat-ky" or "cau-hinh" => "settings.manage",
+        "ho-tro" => "customers.manage",
+        _ => "reports.view"
+    };
+
+    private AppUser? NguoiDung { get; set; }
+    private bool DangTai { get; set; } = true;
+    private bool CoQuyen { get; set; }
+    private bool ToanHeThong { get; set; }
+    private List<int> ChiNhanhDuocCap { get; set; } = [];
+    private bool ThanhCong { get; set; }
+    private string? ThongBao { get; set; }
+    private DashboardThongKe? ThongKe { get; set; }
+    private List<XeMayModel> DanhSachXe { get; set; } = [];
+    private List<DonHangEntity> DonHangs { get; set; } = [];
+    private List<AppUser> KhachHangs { get; set; } = [];
+    private AppUser? KhachHangDangXem { get; set; }
+    private List<DonHangEntity> DonHangKhachDangXem { get; set; } = [];
+    private List<AppUser> NhanSu { get; set; } = [];
+    private List<IdentityRole<int>> VaiTros { get; set; } = [];
+    private Dictionary<int, List<string>> VaiTroTheoNguoiDung { get; set; } = [];
+    private List<QuyenHeThong> QuyenHeThongs { get; set; } = [];
+    private HashSet<(int RoleId, int PermissionId)> QuyenDaGan { get; set; } = [];
+    private List<ChiNhanh> ChiNhanhs { get; set; } = [];
+    private List<NhaCungCap> NhaCungCaps { get; set; } = [];
+    private List<KhuyenMai> KhuyenMais { get; set; } = [];
+    private List<YeuCauBaoHanh> YeuCauBaoHanhs { get; set; } = [];
+    private List<(int Id, string MoTa, string TrangThai, DateTime NgayTao, string? UserEmail)> YeuCauBaoHanhHienThi { get; set; } = [];
+    private List<(int Id, string TieuDe, string NoiDung, string TrangThai, DateTime NgayTao, string? UserEmail)> PhieuHoTros { get; set; } = [];
+    private List<BaiViet> BaiViets { get; set; } = [];
+    private List<ThongBaoNguoiDung> ThongBaos { get; set; } = [];
+    private List<NhatKyHeThong> NhatKys { get; set; } = [];
+    private List<CauHinhCuaHang> CauHinhs { get; set; } = [];
+    private List<(string TenXe, int SoLuong, decimal DoanhThu)> BaoCaoSanPhams { get; set; } = [];
+    private List<(DateTime NgayTao, string TenXe, string TenChiNhanh, string LoaiGiaoDich, int SoLuongThayDoi, string GhiChu)> BienDongKhos { get; set; } = [];
+    private ProductForm XeForm { get; set; } = new();
+    private InventoryForm DieuChinhKho { get; set; } = new();
+    private TransferForm ChuyenKhoForm { get; set; } = new();
+    private PosForm BanHangTaiQuay { get; set; } = new();
+    private SupplierForm NhaCungCapForm { get; set; } = new();
+    private PromotionForm KhuyenMaiForm { get; set; } = new();
+    private ArticleForm BaiVietForm { get; set; } = new();
+    private BranchForm ChiNhanhForm { get; set; } = new();
+    private NotificationForm ThongBaoForm { get; set; } = new();
+    private SettingForm CauHinhForm { get; set; } = new();
+    private string? VaiTroChon { get; set; }
+    private int ChiNhanhChon { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        DangTai = true;
+        ThongBao = null;
+        try
+        {
+            var authentication = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            NguoiDung = await UserManager.GetUserAsync(authentication.User);
+            if (NguoiDung is null)
+            {
+                CoQuyen = false;
+                return;
+            }
+
+            ToanHeThong = await PermissionService.CoPhamViToanHeThongAsync(authentication.User);
+            ChiNhanhDuocCap = await PermissionService.LayChiNhanhDuocCapAsync(authentication.User);
+            CoQuyen = await PermissionService.CoQuyenAsync(authentication.User, MaQuyen);
+            var branchScoped = ModuleHienTai is "dashboard" or "bao-cao" or "don-hang" or "ban-hang"
+                or "kho" or "khach-hang" or "bao-hanh" or "ho-tro";
+            if (branchScoped && !ToanHeThong && ChiNhanhDuocCap.Count == 0)
+            {
+                CoQuyen = false;
+            }
+
+            if (!CoQuyen)
+            {
+                return;
+            }
+
+            await TaiDuLieuAsync();
+            if (ModuleHienTai == "san-pham" && XeId is int xeId)
+            {
+                var xe = DanhSachXe.FirstOrDefault(item => item.Id == xeId);
+                if (xe is not null)
+                {
+                    ChonXe(xe);
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Không thể tải phân hệ quản trị {Module}.", ModuleHienTai);
+            ThongBao = "Không thể tải dữ liệu quản trị lúc này.";
+            ThanhCong = false;
+        }
+        finally
+        {
+            DangTai = false;
+        }
+    }
+
+    private async Task TaiDuLieuAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        switch (ModuleHienTai)
+        {
+            case "dashboard":
+            case "bao-cao":
+                ThongKe = await DichVuQuanTri.LayThongKeAsync(ToanHeThong ? null : ChiNhanhDuocCap);
+                DanhSachXe = await XeMayService.LayTatCaXeAsync();
+                DonHangs = await DichVuQuanTri.LayDonHangAsync(ToanHeThong ? null : ChiNhanhDuocCap);
+                var completedOrders = db.DonHangs.Where(x => x.TrangThai == "HoanThanh");
+                if (!ToanHeThong)
+                {
+                    completedOrders = completedOrders.Where(x => ChiNhanhDuocCap.Contains(x.ChiNhanhId ?? 0));
+                }
+
+                var productReport = await db.ChiTietDonHangs
+                    .Join(completedOrders,
+                        item => item.DonHangId, order => order.Id, (item, _) => item)
+                    .GroupBy(x => x.TenXe)
+                    .Select(group => new
+                    {
+                        TenXe = group.Key,
+                        SoLuong = group.Sum(x => x.SoLuong),
+                        DoanhThu = group.Sum(x => x.SoLuong * x.DonGia)
+                    })
+                    .OrderByDescending(x => x.DoanhThu).ToListAsync();
+                BaoCaoSanPhams = productReport
+                    .Select(x => (x.TenXe, x.SoLuong, x.DoanhThu)).ToList();
+                break;
+            case "san-pham":
+                DanhSachXe = await XeMayService.LayTatCaXeAsync();
+                break;
+            case "don-hang":
+            case "ban-hang":
+                DonHangs = await DichVuQuanTri.LayDonHangAsync(ToanHeThong ? null : ChiNhanhDuocCap);
+                if (ModuleHienTai == "ban-hang")
+                {
+                    await LoadCustomersAsync();
+                    DanhSachXe = await LayXeTheoPhamViKhoAsync(db);
+                    ChiNhanhs = await LayChiNhanhTrongPhamViAsync(db);
+                }
+                break;
+            case "kho":
+                DanhSachXe = await LayXeTheoPhamViKhoAsync(db);
+                ChiNhanhs = await LayChiNhanhTrongPhamViAsync(db);
+                NhaCungCaps = await db.NhaCungCaps.AsNoTracking().Where(x => x.DangHoatDong).OrderBy(x => x.TenNhaCungCap).ToListAsync();
+                var movements = db.BienDongKhos.AsQueryable();
+                if (!ToanHeThong)
+                {
+                    movements = movements.Where(x => ChiNhanhDuocCap.Contains(x.ChiNhanhId));
+                }
+
+                var movementRows = await movements
+                    .Join(db.XeMays, movement => movement.XeMayId, product => product.Id, (movement, product) => new { movement, product })
+                    .Join(db.ChiNhanhs, pair => pair.movement.ChiNhanhId, branch => branch.Id,
+                        (pair, branch) => new
+                        {
+                            pair.movement.NgayTao,
+                            TenXe = pair.product.TenXe,
+                            TenChiNhanh = branch.TenChiNhanh,
+                            pair.movement.LoaiGiaoDich,
+                            pair.movement.SoLuongThayDoi,
+                            pair.movement.GhiChu
+                        })
+                    .OrderByDescending(x => x.NgayTao).Take(100).ToListAsync();
+                BienDongKhos = movementRows
+                    .Select(x => (x.NgayTao, x.TenXe, x.TenChiNhanh,
+                        x.LoaiGiaoDich, x.SoLuongThayDoi, x.GhiChu)).ToList();
+                break;
+            case "khach-hang":
+                await LoadCustomersAsync();
+                break;
+            case "nha-cung-cap":
+                NhaCungCaps = await db.NhaCungCaps.AsNoTracking().OrderBy(x => x.TenNhaCungCap).ToListAsync();
+                break;
+            case "khuyen-mai":
+                KhuyenMais = await db.KhuyenMais.AsNoTracking().OrderByDescending(x => x.BatDau).ToListAsync();
+                break;
+            case "bao-hanh":
+                var warrantyRequests = db.YeuCauBaoHanhs.AsQueryable();
+                if (!ToanHeThong)
+                {
+                    warrantyRequests = warrantyRequests.Where(x => x.DonHangId.HasValue
+                        && db.DonHangs.Any(order => order.Id == x.DonHangId.Value
+                            && ChiNhanhDuocCap.Contains(order.ChiNhanhId ?? 0)));
+                }
+
+                var warrantyRows = await warrantyRequests
+                    .Join(db.Users, request => request.NguoiDungId, user => user.Id,
+                        (request, user) => new
+                        {
+                            request.Id,
+                            request.MoTa,
+                            request.TrangThai,
+                            request.NgayTao,
+                            UserEmail = user.Email
+                        })
+                    .OrderByDescending(x => x.NgayTao).ToListAsync();
+                YeuCauBaoHanhHienThi = warrantyRows
+                    .Select(x => (x.Id, x.MoTa, x.TrangThai, x.NgayTao, x.UserEmail)).ToList();
+                break;
+            case "ho-tro":
+                var tickets = db.PhieuHoTros.AsQueryable();
+                if (!ToanHeThong)
+                {
+                    var scopedCustomerIds = db.Users
+                        .Where(user => user.ChiNhanhId.HasValue && ChiNhanhDuocCap.Contains(user.ChiNhanhId.Value))
+                        .Select(user => user.Id)
+                        .Union(db.DonHangs.Where(order => ChiNhanhDuocCap.Contains(order.ChiNhanhId ?? 0))
+                            .Select(order => order.NguoiDungId));
+                    tickets = tickets.Where(ticket => ticket.NguoiDungId.HasValue
+                        && scopedCustomerIds.Contains(ticket.NguoiDungId.Value));
+                }
+
+                var ticketRows = await tickets
+                    .GroupJoin(db.Users, ticket => ticket.NguoiDungId, user => user.Id,
+                        (ticket, users) => new { ticket, user = users.Select(x => x.Email).FirstOrDefault() })
+                    .Select(x => new
+                    {
+                        x.ticket.Id,
+                        x.ticket.TieuDe,
+                        x.ticket.NoiDung,
+                        x.ticket.TrangThai,
+                        x.ticket.NgayTao,
+                        UserEmail = x.user
+                    })
+                    .OrderByDescending(x => x.NgayTao).ToListAsync();
+                PhieuHoTros = ticketRows
+                    .Select(x => (x.Id, x.TieuDe, x.NoiDung, x.TrangThai, x.NgayTao, x.UserEmail)).ToList();
+                break;
+            case "noi-dung":
+                BaiViets = await db.BaiViets.AsNoTracking().OrderByDescending(x => x.NgayTao).ToListAsync();
+                break;
+            case "nhan-su":
+                NhanSu = await DichVuQuanTri.LayNhanSuAsync();
+                VaiTros = await DichVuQuanTri.LayVaiTrosAsync();
+                ChiNhanhs = await LayChiNhanhTrongPhamViAsync(db);
+                foreach (var user in NhanSu)
+                {
+                    VaiTroTheoNguoiDung[user.Id] = (await UserManager.GetRolesAsync(user)).ToList();
+                }
+
+                QuyenHeThongs = await PermissionService.LayDanhSachQuyenAsync();
+                var assignments = await db.GanQuyenVaiTros.AsNoTracking()
+                    .Select(x => new { RoleId = x.VaiTroId, PermissionId = x.QuyenId })
+                    .ToListAsync();
+                QuyenDaGan = assignments.Select(x => (x.RoleId, x.PermissionId)).ToHashSet();
+                break;
+            case "chi-nhanh":
+                ChiNhanhs = await db.ChiNhanhs.AsNoTracking().OrderBy(x => x.TenChiNhanh).ToListAsync();
+                break;
+            case "thong-bao":
+                await LoadCustomersAsync();
+                ThongBaos = await db.ThongBaoNguoiDungs.AsNoTracking().OrderByDescending(x => x.NgayTao)
+                    .Take(200).ToListAsync();
+                break;
+            case "nhat-ky":
+                NhatKys = await db.NhatKyHeThongs.AsNoTracking().OrderByDescending(x => x.NgayTao)
+                    .Take(300).ToListAsync();
+                break;
+            case "cau-hinh":
+                CauHinhs = await db.CauHinhCuaHangs.AsNoTracking().OrderBy(x => x.Khoa).ToListAsync();
+                break;
+        }
+    }
+
+    private async Task LoadCustomersAsync()
+    {
+        var users = (await UserManager.GetUsersInRoleAsync("User")).ToList();
+        if (!ToanHeThong)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var allowedUserIds = await db.DonHangs
+                .Where(x => ChiNhanhDuocCap.Contains(x.ChiNhanhId ?? 0))
+                .Select(x => x.NguoiDungId).Distinct().ToListAsync();
+            users = users.Where(x => allowedUserIds.Contains(x.Id)
+                || x.ChiNhanhId.HasValue && ChiNhanhDuocCap.Contains(x.ChiNhanhId.Value)).ToList();
+        }
+
+        KhachHangs = users;
+    }
+
+    private async Task<List<ChiNhanh>> LayChiNhanhTrongPhamViAsync(AppDbContext db)
+    {
+        var branches = db.ChiNhanhs.AsNoTracking().Where(x => x.DangHoatDong);
+        if (!ToanHeThong)
+        {
+            branches = branches.Where(x => ChiNhanhDuocCap.Contains(x.Id));
+        }
+
+        return await branches.OrderBy(x => x.TenChiNhanh).ToListAsync();
+    }
+
+    private async Task<List<XeMayModel>> LayXeTheoPhamViKhoAsync(AppDbContext db)
+    {
+        var products = await XeMayService.LayTatCaXeAsync();
+        if (!ToanHeThong)
+        {
+            var stockByProduct = await db.TonKhoChiNhanhs
+                .Where(x => ChiNhanhDuocCap.Contains(x.ChiNhanhId))
+                .GroupBy(x => x.XeMayId)
+                .Select(group => new { ProductId = group.Key, Quantity = group.Sum(x => x.SoLuong) })
+                .ToDictionaryAsync(x => x.ProductId, x => x.Quantity);
+            foreach (var product in products)
+            {
+                product.SoLuong = stockByProduct.GetValueOrDefault(product.Id);
+            }
+        }
+
+        return products;
+    }
+
+    private RenderFragment RenderOrders(IReadOnlyList<DonHangEntity> orders) => @<div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead><tr><th>Mã đơn</th><th>Ngày tạo</th><th>Khách</th><th>Tổng tiền</th><th>Thanh toán</th><th>Trạng thái</th><th>Cập nhật</th></tr></thead>
+            <tbody>
+                @foreach (var order in orders)
+                {
+                    <tr>
+                        <td>@order.MaDonHang<small class="d-block text-secondary">@string.Join(", ", order.ChiTiet.Select(x => $"{x.TenXe} × {x.SoLuong}"))</small></td>
+                        <td>@order.NgayTao.ToLocalTime().ToString("g")</td><td>@order.NguoiNhan</td><td>@order.TongTien.ToString("N0") ₫</td>
+                        <td>@order.PhuongThucThanhToan</td><td><span class="badge text-bg-light">@order.TrangThai</span></td>
+                        <td>
+                            @if (order.TrangThai is not ("DaHuy" or "HoanThanh"))
+                            {
+                                <select class="form-select form-select-sm mb-1" @bind="TrangThaiMoi" aria-label="Trạng thái mới">
+                                    <option value="">Chọn trạng thái</option><option value="DangXuLy">Đang xử lý</option><option value="DangGiao">Đang giao</option><option value="HoanThanh">Hoàn thành / đã thu COD</option>
+                                </select>
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => CapNhatDonAsync(order)">Lưu</button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => HuyDonNhanVienAsync(order)">Hủy</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>;
+
+    private RenderFragment RenderWarranty() => @<div class="table-responsive"><table class="table table-striped"><thead><tr><th>Ngày</th><th>Khách</th><th>Nội dung</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+        @foreach (var item in YeuCauBaoHanhHienThi) { <tr><td>@item.NgayTao.ToLocalTime().ToString("g")</td><td>@item.UserEmail</td><td>@item.MoTa</td><td>@item.TrangThai</td><td><button class="btn btn-sm btn-outline-primary" @onclick="() => CapNhatBaoHanhAsync(item.Id)">Đánh dấu hoàn tất</button></td></tr> }
+    </tbody></table></div>;
+
+    private async Task LuuXeAsync()
+    {
+        await ThucHienAsync("products.manage", async () =>
+        {
+            var product = XeForm.Id == 0
+                ? new XeMayModel()
+                : await XeMayService.LayTheoIdAsync(XeForm.Id)
+                    ?? throw new InvalidOperationException("Không tìm thấy xe máy cần cập nhật.");
+            product.MaXe = XeForm.MaXe;
+            product.TenXe = XeForm.TenXe;
+            product.HangXe = XeForm.HangXe;
+            product.LoaiXe = XeForm.LoaiXe;
+            product.GiaNiemYet = XeForm.GiaNiemYet;
+            product.GiaBan = XeForm.GiaBan;
+            product.HinhAnh = XeForm.HinhAnh;
+            product.MoTa = XeForm.MoTa;
+            product.DangKinhDoanh = XeForm.DangKinhDoanh;
+            if (product.Id == 0) await XeMayService.ThemXeAsync(product);
+            else await XeMayService.CapNhatXeAsync(product);
+            await GhiNhatKyAsync(XeForm.Id == 0 ? "TaoXe" : "CapNhatXe", XeForm.TenXe);
+            XeForm = new ProductForm();
+            DanhSachXe = await XeMayService.LayTatCaXeAsync();
+        });
+    }
+
+    private void ChonXe(XeMayModel xe) => XeForm = new ProductForm
+    {
+        Id = xe.Id, MaXe = xe.MaXe, TenXe = xe.TenXe, HangXe = xe.HangXe,
+        LoaiXe = xe.LoaiXe, GiaNiemYet = xe.GiaNiemYet, GiaBan = xe.GiaBan,
+        SoLuong = xe.SoLuong, HinhAnh = xe.HinhAnh, MoTa = xe.MoTa,
+        DangKinhDoanh = xe.DangKinhDoanh
+    };
+
+    private void DatLaiFormXe() => XeForm = new ProductForm();
+
+    private async Task NgungKinhDoanhAsync(int id)
+    {
+        await ThucHienAsync("products.manage", async () =>
+        {
+            await XeMayService.XoaXeAsync(id);
+            await GhiNhatKyAsync("NgungKinhDoanh", id.ToString());
+            DanhSachXe = await XeMayService.LayTatCaXeAsync();
+        });
+    }
+
+    private async Task MoKinhDoanhAsync(int id)
+    {
+        await ThucHienAsync("products.manage", async () =>
+        {
+            await XeMayService.MoKinhDoanhAsync(id);
+            await GhiNhatKyAsync("MoKinhDoanh", id.ToString());
+            DanhSachXe = await XeMayService.LayTatCaXeAsync();
+        });
+    }
+
+    private async Task CapNhatKhoAsync()
+    {
+        await ThucHienAsync("inventory.manage", async () =>
+        {
+            if (NguoiDung is null) throw new InvalidOperationException("Không xác định được người thao tác.");
+            KiemTraPhamViChiNhanh(DieuChinhKho.ChiNhanhId);
+            await XeMayService.DieuChinhKhoAsync(
+                DieuChinhKho.XeMayId, DieuChinhKho.ChiNhanhId,
+                DieuChinhKho.SoLuong, DieuChinhKho.SoLuong > 0 ? "NhapKho" : "XuatKho",
+                DieuChinhKho.GhiChu, NguoiDung.Id, DieuChinhKho.NhaCungCapId);
+            await GhiNhatKyAsync("DieuChinhKho", $"Xe {DieuChinhKho.XeMayId}: {DieuChinhKho.SoLuong}");
+            DieuChinhKho = new InventoryForm();
+            await TaiDuLieuAsync();
+        });
+    }
+
+    private async Task ChuyenKhoAsync()
+    {
+        await ThucHienAsync("inventory.manage", async () =>
+        {
+            if (NguoiDung is null) throw new InvalidOperationException("Không xác định được người thao tác.");
+            KiemTraPhamViChiNhanh(ChuyenKhoForm.TuChiNhanhId);
+            KiemTraPhamViChiNhanh(ChuyenKhoForm.DenChiNhanhId);
+            await XeMayService.ChuyenKhoAsync(
+                ChuyenKhoForm.XeMayId,
+                ChuyenKhoForm.TuChiNhanhId,
+                ChuyenKhoForm.DenChiNhanhId,
+                ChuyenKhoForm.SoLuong,
+                NguoiDung.Id);
+            await GhiNhatKyAsync("ChuyenKho", $"Xe {ChuyenKhoForm.XeMayId}: {ChuyenKhoForm.SoLuong}");
+            ChuyenKhoForm = new TransferForm();
+            await TaiDuLieuAsync();
+        });
+    }
+
+    private async Task CapNhatDonAsync(DonHangEntity order)
+    {
+        await ThucHienAsync("orders.manage", async () =>
+        {
+            if (string.IsNullOrWhiteSpace(TrangThaiMoi)) throw new InvalidOperationException("Hãy chọn trạng thái cần cập nhật.");
+            await KiemTraPhamViDonHangAsync(order.Id);
+            await DichVuQuanTri.CapNhatTrangThaiDonHangAsync(order.Id, TrangThaiMoi);
+            await GhiNhatKyAsync("CapNhatDonHang", $"{order.MaDonHang}: {TrangThaiMoi}");
+            TrangThaiMoi = null;
+            DonHangs = await DichVuQuanTri.LayDonHangAsync(ToanHeThong ? null : ChiNhanhDuocCap);
+        });
+    }
+
+    private string? TrangThaiMoi { get; set; }
+
+    private async Task HuyDonNhanVienAsync(DonHangEntity order)
+    {
+        await ThucHienAsync("orders.manage", async () =>
+        {
+            if (NguoiDung is null) throw new InvalidOperationException("Không xác định được người thao tác.");
+            await KiemTraPhamViDonHangAsync(order.Id);
+            await DichVuDonHang.HuyDonAsync(order.Id, NguoiDung.Id, staff: true);
+            await GhiNhatKyAsync("HuyDonHang", order.MaDonHang);
+            DonHangs = await DichVuQuanTri.LayDonHangAsync(ToanHeThong ? null : ChiNhanhDuocCap);
+        });
+    }
+
+    private async Task TaoDonTaiQuayAsync()
+    {
+        await ThucHienAsync("orders.manage", async () =>
+        {
+            if (BanHangTaiQuay.KhachHangId <= 0 || BanHangTaiQuay.XeMayId <= 0 || BanHangTaiQuay.SoLuong <= 0)
+                throw new InvalidOperationException("Hãy chọn khách hàng, xe và số lượng hợp lệ.");
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            var product = await db.XeMays.SingleOrDefaultAsync(x => x.Id == BanHangTaiQuay.XeMayId && x.DangKinhDoanh)
+                ?? throw new InvalidOperationException("Không tìm thấy xe cần bán.");
+            if (product.SoLuong < BanHangTaiQuay.SoLuong) throw new InvalidOperationException("Tồn kho không đủ.");
+            var customer = await db.Users.SingleOrDefaultAsync(x => x.Id == BanHangTaiQuay.KhachHangId && x.DangHoatDong)
+                ?? throw new InvalidOperationException("Không tìm thấy khách hàng đang hoạt động.");
+            var branchId = BanHangTaiQuay.ChiNhanhId;
+            if (branchId <= 0 || !await db.ChiNhanhs.AnyAsync(x => x.Id == branchId && x.DangHoatDong)
+                || !ToanHeThong && !ChiNhanhDuocCap.Contains(branchId))
+                throw new InvalidOperationException("Hãy chọn chi nhánh đang hoạt động trong phạm vi được cấp.");
+            if (!ToanHeThong
+                && !await db.DonHangs.AnyAsync(x => x.NguoiDungId == customer.Id
+                    && ChiNhanhDuocCap.Contains(x.ChiNhanhId ?? 0))
+                && (!customer.ChiNhanhId.HasValue || !ChiNhanhDuocCap.Contains(customer.ChiNhanhId.Value)))
+                throw new InvalidOperationException("Khách hàng không thuộc phạm vi chi nhánh được cấp.");
+            var branchStock = await db.TonKhoChiNhanhs.SingleOrDefaultAsync(x =>
+                x.XeMayId == product.Id && x.ChiNhanhId == branchId);
+            if (branchStock is null || branchStock.SoLuong < BanHangTaiQuay.SoLuong)
+                throw new InvalidOperationException("Tồn kho của chi nhánh không đủ.");
+            branchStock.SoLuong -= BanHangTaiQuay.SoLuong;
+            var order = new DonHangEntity
+            {
+                MaDonHang = $"POS-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..24].ToUpperInvariant(),
+                NguoiDungId = customer.Id, ChiNhanhId = branchId, TrangThai = "HoanThanh",
+                PhuongThucThanhToan = "TienMat",
+                NguoiNhan = string.IsNullOrWhiteSpace(BanHangTaiQuay.NguoiNhan) ? customer.HoTen : BanHangTaiQuay.NguoiNhan,
+                SoDienThoaiNhan = string.IsNullOrWhiteSpace(BanHangTaiQuay.SoDienThoai) ? customer.PhoneNumber ?? "" : BanHangTaiQuay.SoDienThoai,
+                DiaChiNhan = BanHangTaiQuay.DiaChi,
+                TamTinh = product.GiaBan * BanHangTaiQuay.SoLuong,
+                TongTien = product.GiaBan * BanHangTaiQuay.SoLuong,
+                ChiTiet = [new ChiTietDonHang { XeMayId = product.Id, TenXe = product.TenXe, DonGia = product.GiaBan, SoLuong = BanHangTaiQuay.SoLuong }]
+            };
+            product.SoLuong -= BanHangTaiQuay.SoLuong;
+            db.DonHangs.Add(order);
+            db.GiaoDichThanhToans.Add(new GiaoDichThanhToan { DonHang = order, PhuongThuc = "TienMat", TrangThai = "DaThuTien", SoTien = order.TongTien, NgayThanhToan = DateTime.UtcNow });
+            db.BienDongKhos.Add(new BienDongKho { XeMayId = product.Id, ChiNhanhId = branchId, SoLuongThayDoi = -BanHangTaiQuay.SoLuong, LoaiGiaoDich = "BanTaiQuay", GhiChu = order.MaDonHang, NguoiTaoId = NguoiDung!.Id });
+            await db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            await GhiNhatKyAsync("BanTaiQuay", order.MaDonHang);
+            BanHangTaiQuay = new PosForm();
+            DonHangs = await DichVuQuanTri.LayDonHangAsync(ToanHeThong ? null : ChiNhanhDuocCap);
+            DanhSachXe = await XeMayService.LayTatCaXeAsync();
+        });
+    }
+
+    private async Task DoiTrangThaiNguoiDungAsync(AppUser user)
+    {
+        await ThucHienAsync("customers.manage", async () =>
+        {
+            if (NguoiDung?.Id == user.Id) throw new InvalidOperationException("Không thể khóa chính tài khoản đang đăng nhập.");
+            user.DangHoatDong = !user.DangHoatDong;
+            var result = await UserManager.UpdateAsync(user);
+            if (!result.Succeeded) throw new InvalidOperationException(string.Join("; ", result.Errors.Select(x => x.Description)));
+            await GhiNhatKyAsync("CapNhatTrangThaiKhachHang", user.Email ?? user.Id.ToString());
+            await LoadCustomersAsync();
+        });
+    }
+
+    private async Task XemKhachHangAsync(AppUser user)
+    {
+        await ThucHienAsync("customers.view", async () =>
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            KhachHangDangXem = await UserManager.FindByIdAsync(user.Id.ToString());
+            var customerOrders = db.DonHangs.AsNoTracking()
+                .Where(order => order.NguoiDungId == user.Id);
+            if (!ToanHeThong)
+            {
+                customerOrders = customerOrders.Where(order => ChiNhanhDuocCap.Contains(order.ChiNhanhId ?? 0));
+            }
+
+            DonHangKhachDangXem = await customerOrders
+                .Include(order => order.ChiTiet)
+                .OrderByDescending(order => order.NgayTao)
+                .ToListAsync();
+        });
+    }
+
+    private void DongHoSoKhachHang()
+    {
+        KhachHangDangXem = null;
+        DonHangKhachDangXem = [];
+    }
+
+    private async Task ThemNhaCungCapAsync()
+    {
+        await ThucHienAsync("inventory.manage", async () =>
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            db.NhaCungCaps.Add(new NhaCungCap
+            {
+                MaNhaCungCap = NhaCungCapForm.MaNhaCungCap.Trim().ToUpperInvariant(),
+                TenNhaCungCap = NhaCungCapForm.TenNhaCungCap.Trim(),
+                NguoiLienHe = NhaCungCapForm.NguoiLienHe.Trim(),
+                SoDienThoai = NhaCungCapForm.SoDienThoai.Trim(),
+                Email = NhaCungCapForm.Email.Trim()
+            });
+            await db.SaveChangesAsync();
+            await GhiNhatKyAsync("ThemNhaCungCap", NhaCungCapForm.MaNhaCungCap);
+            NhaCungCapForm = new SupplierForm();
+            NhaCungCaps = await db.NhaCungCaps.AsNoTracking().OrderBy(x => x.TenNhaCungCap).ToListAsync();
+        });
+    }
+
+    private async Task LuuKhuyenMaiAsync()
+    {
+        await ThucHienAsync("products.manage", async () =>
+        {
+            if (KhuyenMaiForm.KetThuc <= KhuyenMaiForm.BatDau || KhuyenMaiForm.GiaTri <= 0
+                || KhuyenMaiForm.DonToiThieu < 0
+                || KhuyenMaiForm.TheoPhanTram && KhuyenMaiForm.GiaTri > 100)
+                throw new InvalidOperationException("Thời gian hoặc giá trị khuyến mãi không hợp lệ.");
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var code = KhuyenMaiForm.MaKhuyenMai.Trim().ToUpperInvariant();
+            if (await db.KhuyenMais.AnyAsync(x => x.MaKhuyenMai == code && x.Id != KhuyenMaiForm.Id))
+                throw new InvalidOperationException("Mã khuyến mãi này đã tồn tại.");
+            var promotion = KhuyenMaiForm.Id == 0
+                ? new KhuyenMai()
+                : await db.KhuyenMais.SingleOrDefaultAsync(x => x.Id == KhuyenMaiForm.Id)
+                    ?? throw new InvalidOperationException("Không tìm thấy mã khuyến mãi.");
+            promotion.MaKhuyenMai = code;
+            promotion.TenKhuyenMai = KhuyenMaiForm.TenKhuyenMai.Trim();
+            promotion.GiaTri = KhuyenMaiForm.GiaTri;
+            promotion.TheoPhanTram = KhuyenMaiForm.TheoPhanTram;
+            promotion.DonToiThieu = KhuyenMaiForm.DonToiThieu;
+            promotion.BatDau = DateTime.SpecifyKind(KhuyenMaiForm.BatDau.Date, DateTimeKind.Local).ToUniversalTime();
+            promotion.KetThuc = DateTime.SpecifyKind(KhuyenMaiForm.KetThuc.Date.AddDays(1).AddTicks(-1), DateTimeKind.Local).ToUniversalTime();
+            promotion.DangHoatDong = KhuyenMaiForm.DangHoatDong;
+            if (KhuyenMaiForm.Id == 0)
+            {
+                db.KhuyenMais.Add(promotion);
+            }
+            await db.SaveChangesAsync();
+            await GhiNhatKyAsync(KhuyenMaiForm.Id == 0 ? "ThemKhuyenMai" : "CapNhatKhuyenMai", code);
+            KhuyenMaiForm = new PromotionForm();
+            KhuyenMais = await db.KhuyenMais.AsNoTracking().OrderByDescending(x => x.BatDau).ToListAsync();
+        });
+    }
+
+    private void SuaKhuyenMai(KhuyenMai promotion) => KhuyenMaiForm = new PromotionForm
+    {
+        Id = promotion.Id,
+        MaKhuyenMai = promotion.MaKhuyenMai,
+        TenKhuyenMai = promotion.TenKhuyenMai,
+        GiaTri = promotion.GiaTri,
+        TheoPhanTram = promotion.TheoPhanTram,
+        DonToiThieu = promotion.DonToiThieu,
+        BatDau = promotion.BatDau.ToLocalTime(),
+        KetThuc = promotion.KetThuc.ToLocalTime(),
+        DangHoatDong = promotion.DangHoatDong
+    };
+
+    private void DatLaiKhuyenMai() => KhuyenMaiForm = new PromotionForm();
+
+    private async Task XoaKhuyenMaiAsync(int promotionId)
+    {
+        await ThucHienAsync("products.manage", async () =>
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var promotion = await db.KhuyenMais.SingleOrDefaultAsync(x => x.Id == promotionId)
+                ?? throw new InvalidOperationException("Không tìm thấy mã khuyến mãi.");
+            db.KhuyenMais.Remove(promotion);
+            await db.SaveChangesAsync();
+            await GhiNhatKyAsync("XoaKhuyenMai", promotion.MaKhuyenMai);
+            if (KhuyenMaiForm.Id == promotionId) DatLaiKhuyenMai();
+            KhuyenMais = await db.KhuyenMais.AsNoTracking().OrderByDescending(x => x.BatDau).ToListAsync();
+        });
+    }
+
+    private async Task CapNhatBaoHanhAsync(int requestId)
+    {
+        await ThucHienAsync("warranty.manage", async () =>
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var request = await db.YeuCauBaoHanhs.SingleOrDefaultAsync(x => x.Id == requestId)
+                ?? throw new InvalidOperationException("Không tìm thấy yêu cầu bảo hành.");
+            if (request.DonHangId.HasValue)
+            {
+                await KiemTraPhamViDonHangAsync(request.DonHangId.Value);
+            }
+            else if (!ToanHeThong)
+            {
+                throw new UnauthorizedAccessException("Yêu cầu bảo hành không thuộc phạm vi chi nhánh được cấp.");
+            }
+
+            request.TrangThai = "HoanThanh";
+            await db.SaveChangesAsync();
+            await GhiNhatKyAsync("HoanTatBaoHanh", requestId.ToString());
+            await TaiDuLieuAsync();
+        });
+    }
+
+    private async Task CapNhatHoTroAsync(int requestId)
+    {
+        await ThucHienAsync("customers.manage", async () =>
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var ticket = await db.PhieuHoTros.SingleOrDefaultAsync(x => x.Id == requestId)
+                ?? throw new InvalidOperationException("Không tìm thấy yêu cầu hỗ trợ.");
+            ticket.TrangThai = "DaXuLy";
+            await db.SaveChangesAsync();
+            await GhiNhatKyAsync("XuLyHoTro", requestId.ToString());
+            await TaiDuLieuAsync();
+        });
+    }
+
+    private async Task ThemBaiVietAsync()
+    {
+        await ThucHienAsync("products.manage", async () =>
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            db.BaiViets.Add(new BaiViet
+            {
+                TieuDe = BaiVietForm.TieuDe.Trim(),
+                TomTat = BaiVietForm.TomTat.Trim(),
+                NoiDung = BaiVietForm.NoiDung.Trim(),
+                Loai = BaiVietForm.Loai,
+                DaXuatBan = BaiVietForm.DaXuatBan
+            });
+            await db.SaveChangesAsync();
+            await GhiNhatKyAsync("TaoBaiViet", BaiVietForm.TieuDe);
+            BaiVietForm = new ArticleForm();
+            BaiViets = await db.BaiViets.AsNoTracking().OrderByDescending(x => x.NgayTao).ToListAsync();
+        });
+    }
+
+    private async Task DoiTrangThaiBaiVietAsync(BaiViet article)
+    {
+        await ThucHienAsync("products.manage", async () =>
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var current = await db.BaiViets.SingleAsync(x => x.Id == article.Id);
+            current.DaXuatBan = !current.DaXuatBan;
+            await db.SaveChangesAsync();
+            BaiViets = await db.BaiViets.AsNoTracking().OrderByDescending(x => x.NgayTao).ToListAsync();
+        });
+    }
+
+    private async Task ThemChiNhanhAsync()
+    {
+        await ThucHienAsync("settings.manage", async () =>
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            db.ChiNhanhs.Add(new ChiNhanh
+            {
+                MaChiNhanh = ChiNhanhForm.MaChiNhanh.Trim().ToUpperInvariant(),
+                TenChiNhanh = ChiNhanhForm.TenChiNhanh.Trim(),
+                DiaChi = ChiNhanhForm.DiaChi.Trim(),
+                SoDienThoai = ChiNhanhForm.SoDienThoai.Trim()
+            });
+            await db.SaveChangesAsync();
+            await GhiNhatKyAsync("ThemChiNhanh", ChiNhanhForm.MaChiNhanh);
+            ChiNhanhForm = new BranchForm();
+            ChiNhanhs = await db.ChiNhanhs.AsNoTracking().OrderBy(x => x.TenChiNhanh).ToListAsync();
+        });
+    }
+
+    private async Task GuiThongBaoAsync()
+    {
+        await ThucHienAsync("settings.manage", async () =>
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            db.ThongBaoNguoiDungs.Add(new ThongBaoNguoiDung
+            {
+                TieuDe = ThongBaoForm.TieuDe.Trim(),
+                NoiDung = ThongBaoForm.NoiDung.Trim(),
+                NguoiDungId = ThongBaoForm.NguoiDungId
+            });
+            await db.SaveChangesAsync();
+            await GhiNhatKyAsync("GuiThongBao", ThongBaoForm.TieuDe);
+            ThongBaoForm = new NotificationForm();
+            ThongBaos = await db.ThongBaoNguoiDungs.AsNoTracking().OrderByDescending(x => x.NgayTao).Take(200).ToListAsync();
+        });
+    }
+
+    private async Task LuuCauHinhAsync()
+    {
+        await ThucHienAsync("settings.manage", async () =>
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var setting = await db.CauHinhCuaHangs.SingleOrDefaultAsync(x => x.Khoa == CauHinhForm.Khoa.Trim());
+            if (setting is null)
+            {
+                db.CauHinhCuaHangs.Add(new CauHinhCuaHang { Khoa = CauHinhForm.Khoa.Trim(), GiaTri = CauHinhForm.GiaTri.Trim() });
+            }
+            else
+            {
+                setting.GiaTri = CauHinhForm.GiaTri.Trim();
+            }
+
+            await db.SaveChangesAsync();
+            await GhiNhatKyAsync("CapNhatCauHinh", CauHinhForm.Khoa);
+            CauHinhs = await db.CauHinhCuaHangs.AsNoTracking().OrderBy(x => x.Khoa).ToListAsync();
+        });
+    }
+
+    private void ChonCauHinh(CauHinhCuaHang setting) =>
+        CauHinhForm = new SettingForm { Khoa = setting.Khoa, GiaTri = setting.GiaTri };
+
+    private async Task GanVaiTroAsync(AppUser employee, bool assign)
+    {
+        await ThucHienAsync("roles.manage", async () =>
+        {
+            if (NguoiDung is null || string.IsNullOrWhiteSpace(VaiTroChon))
+                throw new InvalidOperationException("Hãy chọn một vai trò.");
+            await DichVuQuanTri.GanVaiTroAsync(NguoiDung.Id, employee.Id, VaiTroChon, assign);
+            await GhiNhatKyAsync(assign ? "GanVaiTro" : "ThuHoiVaiTro", $"{employee.Email}: {VaiTroChon}");
+            VaiTroTheoNguoiDung[employee.Id] = (await UserManager.GetRolesAsync(employee)).ToList();
+        });
+    }
+
+    private async Task GanChiNhanhAsync(AppUser employee, bool assign)
+    {
+        await ThucHienAsync("roles.manage", async () =>
+        {
+            if (ChiNhanhChon <= 0)
+            {
+                throw new InvalidOperationException("Hãy chọn chi nhánh cần gán hoặc thu hồi.");
+            }
+
+            await PermissionService.GanPhamViChiNhanhAsync(employee.Id, ChiNhanhChon, assign);
+            await GhiNhatKyAsync(assign ? "GanPhamViChiNhanh" : "ThuHoiPhamViChiNhanh",
+                $"{employee.Email}: {ChiNhanhChon}");
+            await TaiDuLieuAsync();
+        });
+    }
+
+    private void KiemTraPhamViChiNhanh(int branchId)
+    {
+        if (branchId <= 0 || !ToanHeThong && !ChiNhanhDuocCap.Contains(branchId))
+        {
+            throw new UnauthorizedAccessException("Chi nhánh nằm ngoài phạm vi được cấp.");
+        }
+    }
+
+    private async Task KiemTraPhamViDonHangAsync(int orderId)
+    {
+        if (ToanHeThong)
+        {
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (!await db.DonHangs.AnyAsync(x =>
+                x.Id == orderId && ChiNhanhDuocCap.Contains(x.ChiNhanhId ?? 0)))
+        {
+            throw new UnauthorizedAccessException("Đơn hàng nằm ngoài phạm vi chi nhánh được cấp.");
+        }
+    }
+
+    private async Task CapNhatQuyenAsync(int roleId, int permissionId, ChangeEventArgs args)
+    {
+        var allowed = args.Value is bool value && value;
+        await ThucHienAsync("roles.manage", async () =>
+        {
+            await PermissionService.GanQuyenAsync(roleId, permissionId, allowed);
+            if (allowed) QuyenDaGan.Add((roleId, permissionId));
+            else QuyenDaGan.Remove((roleId, permissionId));
+            await GhiNhatKyAsync("CapNhatQuyen", $"Vai trò {roleId}, quyền {permissionId}: {allowed}");
+        });
+    }
+
+    private async Task GhiNhatKyAsync(string action, string detail)
+    {
+        if (NguoiDung is not null)
+        {
+            await DichVuNhatKy.GhiAsync(NguoiDung.Id, action, ModuleHienTai, detail);
+        }
+    }
+
+    private async Task ThucHienAsync(string requiredPermission, Func<Task> operation)
+    {
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            await PermissionService.YeuCauQuyenAsync(state.User, requiredPermission);
+            await operation();
+            ThanhCong = true;
+            ThongBao = "Đã lưu thay đổi.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            ThanhCong = false;
+            ThongBao = "Tài khoản không được cấp quyền thực hiện thao tác này.";
+        }
+        catch (InvalidOperationException exception)
+        {
+            ThanhCong = false;
+            ThongBao = exception.Message;
+        }
+        catch (DbUpdateException exception)
+        {
+            Logger.LogWarning(exception, "Không thể lưu dữ liệu cho phân hệ {Module}.", ModuleHienTai);
+            ThanhCong = false;
+            ThongBao = "Không thể lưu dữ liệu. Hãy kiểm tra mã định danh đã tồn tại và thử lại.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Thao tác thất bại trong phân hệ {Module}.", ModuleHienTai);
+            ThanhCong = false;
+            ThongBao = "Thao tác không thành công. Vui lòng thử lại.";
+        }
+    }
+
+    private sealed class ProductForm
+    {
+        public int Id { get; set; }
+        [StringLength(32)] public string MaXe { get; set; } = string.Empty;
+        [Required, StringLength(160)] public string TenXe { get; set; } = string.Empty;
+        [Required, StringLength(80)] public string HangXe { get; set; } = string.Empty;
+        public string LoaiXe { get; set; } = "Xe so";
+        [Range(typeof(decimal), "0", "999999999999")] public decimal GiaNiemYet { get; set; }
+        [Range(typeof(decimal), "0", "999999999999")] public decimal GiaBan { get; set; }
+        [Range(0, int.MaxValue)] public int SoLuong { get; set; }
+        [StringLength(1000)] public string HinhAnh { get; set; } = string.Empty;
+        [StringLength(4000)] public string MoTa { get; set; } = string.Empty;
+        public bool DangKinhDoanh { get; set; } = true;
+    }
+
+    private sealed class InventoryForm
+    {
+        [Range(1, int.MaxValue)] public int XeMayId { get; set; }
+        [Range(1, int.MaxValue)] public int ChiNhanhId { get; set; }
+        [Required] public int SoLuong { get; set; }
+        [Required, StringLength(320)] public string GhiChu { get; set; } = string.Empty;
+        public int? NhaCungCapId { get; set; }
+    }
+
+    private sealed class TransferForm
+    {
+        [Range(1, int.MaxValue)] public int XeMayId { get; set; }
+        [Range(1, int.MaxValue)] public int TuChiNhanhId { get; set; }
+        [Range(1, int.MaxValue)] public int DenChiNhanhId { get; set; }
+        [Range(1, 10000)] public int SoLuong { get; set; } = 1;
+    }
+    private sealed class PosForm
+    {
+        [Range(1, int.MaxValue)] public int ChiNhanhId { get; set; }
+        [Range(1, int.MaxValue)] public int KhachHangId { get; set; }
+        [Range(1, int.MaxValue)] public int XeMayId { get; set; }
+        [Range(1, 100)] public int SoLuong { get; set; } = 1;
+        [StringLength(80)] public string NguoiNhan { get; set; } = string.Empty;
+        [StringLength(32)] public string SoDienThoai { get; set; } = string.Empty;
+        [StringLength(320)] public string DiaChi { get; set; } = string.Empty;
+    }
+
+    private sealed class SupplierForm
+    {
+        [Required, StringLength(32)] public string MaNhaCungCap { get; set; } = string.Empty;
+        [Required, StringLength(160)] public string TenNhaCungCap { get; set; } = string.Empty;
+        [StringLength(160)] public string NguoiLienHe { get; set; } = string.Empty;
+        [StringLength(32)] public string SoDienThoai { get; set; } = string.Empty;
+        [EmailAddress, StringLength(320)] public string Email { get; set; } = string.Empty;
+    }
+
+    private sealed class PromotionForm
+    {
+        public int Id { get; set; }
+        [Required, StringLength(40)] public string MaKhuyenMai { get; set; } = string.Empty;
+        [Required, StringLength(160)] public string TenKhuyenMai { get; set; } = string.Empty;
+        [Range(typeof(decimal), "0.01", "999999999999")] public decimal GiaTri { get; set; }
+        public bool TheoPhanTram { get; set; }
+        [Range(typeof(decimal), "0", "999999999999")] public decimal DonToiThieu { get; set; }
+        public DateTime BatDau { get; set; } = DateTime.Today;
+        public DateTime KetThuc { get; set; } = DateTime.Today.AddMonths(1);
+        public bool DangHoatDong { get; set; } = true;
+    }
+
+    private sealed class ArticleForm
+    {
+        [Required, StringLength(180)] public string TieuDe { get; set; } = string.Empty;
+        [StringLength(400)] public string TomTat { get; set; } = string.Empty;
+        [Required, StringLength(10000)] public string NoiDung { get; set; } = string.Empty;
+        public string Loai { get; set; } = "TinTuc";
+        public bool DaXuatBan { get; set; }
+    }
+
+    private sealed class BranchForm
+    {
+        [Required, StringLength(32)] public string MaChiNhanh { get; set; } = string.Empty;
+        [Required, StringLength(160)] public string TenChiNhanh { get; set; } = string.Empty;
+        [StringLength(320)] public string DiaChi { get; set; } = string.Empty;
+        [StringLength(32)] public string SoDienThoai { get; set; } = string.Empty;
+    }
+
+    private sealed class NotificationForm
+    {
+        [Required, StringLength(160)] public string TieuDe { get; set; } = string.Empty;
+        [Required, StringLength(1000)] public string NoiDung { get; set; } = string.Empty;
+        public int? NguoiDungId { get; set; }
+    }
+
+    private sealed class SettingForm
+    {
+        [Required, StringLength(100)] public string Khoa { get; set; } = string.Empty;
+        [StringLength(1000)] public string GiaTri { get; set; } = string.Empty;
+    }
+}
