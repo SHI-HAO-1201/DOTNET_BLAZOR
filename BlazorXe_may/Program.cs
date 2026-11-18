@@ -10,12 +10,21 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.EventLog;
 
 var builder = WebApplication.CreateBuilder(args);
+#if HAS_SHARED_ADMIN_STORE
 if (args.Contains("--create-admin", StringComparer.OrdinalIgnoreCase))
 {
     var adminStore = new MyMvcApp.Services.SharedAdminStore(builder.Configuration);
     Environment.ExitCode = await MyMvcApp.Services.AdminAccountCommand.RunAsync(adminStore);
     return;
 }
+#else
+if (args.Contains("--create-admin", StringComparer.OrdinalIgnoreCase))
+{
+    Console.Error.WriteLine("The --create-admin command requires the shared MyMvcApp project source.");
+    Environment.ExitCode = 1;
+    return;
+}
+#endif
 if (OperatingSystem.IsWindows())
 {
     builder.Logging.AddFilter<EventLogLoggerProvider>(_ => false);
