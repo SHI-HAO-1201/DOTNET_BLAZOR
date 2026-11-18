@@ -6,10 +6,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <DefineConstants Condition="Exists('..\MyMvcApp\Controllers\SharedAdminStore.cs')">$(DefineConstants);HAS_SHARED_ADMIN_STORE</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\MyMvcApp\Controllers\SharedAdminStore.cs" Link="Services\SharedAdminStore.cs" />
+    <Compile Include="..\MyMvcApp\Controllers\SharedAdminStore.cs" Link="Services\SharedAdminStore.cs" Condition="Exists('..\MyMvcApp\Controllers\SharedAdminStore.cs')" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13">
       <PrivateAssets>all</PrivateAssets>

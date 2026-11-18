@@ -146,8 +146,22 @@ public static class KhoiTaoDuLieu
         var articleSeeds = new[]
         {
             new BaiViet { TieuDe = "Chọn xe đi phố: 5 điều nên thử trước khi quyết định", TomTat = "Tư thế ngồi, bán kính quay đầu và chiều cao yên ảnh hưởng thế nào đến trải nghiệm hằng ngày?", Loai = "TuVan", DaXuatBan = true, NoiDung = "Hãy thử chống chân khi dừng, đánh lái ở tốc độ thấp và kiểm tra tầm với tới tay lái. Nếu thường chở thêm người, hãy ngồi thử cả hai vị trí. Cuối cùng, đối chiếu dung tích cốp, trọng lượng xe và lịch bảo dưỡng với nhu cầu sử dụng thực tế." },
-            new BaiViet { TieuDe = "Xe côn tay cho chuyến đi dài: chuẩn bị gì trước ngày khởi hành?", TomTat = "Danh sách kiểm tra lốp, phanh, nhông xích và hành lý gọn nhẹ cho một hành trình an toàn.", Loai = "KinhNghiem", DaXuatBan = true, NoiDung = "Trước chuyến đi, kiểm tra áp suất và độ mòn lốp, hành trình phanh, đèn chiếu sáng, dầu động cơ và độ chùng nhông xích theo hướng dẫn của nhà sản xuất. Sắp xếp hành lý cân bằng, mang giấy tờ cần thiết và nghỉ giữa chặng. Không cố chạy khi mệt hoặc thời tiết xấu." },
-            new BaiViet { TieuDe = "ABS, CBS và phanh thường: hiểu nhanh trước khi chọn xe", TomTat = "Giải thích ngắn gọn các hệ thống phanh phổ biến và cách chúng hỗ trợ người lái.", Loai = "KienThuc", DaXuatBan = true, NoiDung = "ABS giúp hạn chế khóa bánh khi phanh gấp trong điều kiện phù hợp; CBS phân bổ lực phanh giữa hai bánh theo thiết kế của xe. Mỗi hệ thống có giới hạn riêng và không thay thế việc giữ khoảng cách, giảm tốc độ phù hợp hay bảo dưỡng định kỳ. Hãy đọc sách hướng dẫn đúng mẫu xe." },
+            new BaiViet
+            {
+                TieuDe = "Xe côn tay cho chuyến đi dài: chuẩn bị gì trước ngày khởi hành?",
+                TomTat = "Danh sách kiểm tra lốp, phanh, nhông xích và hành lý gọn nhẹ cho một hành trình an toàn.",
+                Loai = "KinhNghiem",
+                DaXuatBan = true,
+                NoiDung = "Trước chuyến đi, kiểm tra áp suất và độ mòn lốp, hành trình phanh, đèn chiếu sáng, dầu động cơ và độ chùng nhông xích theo hướng dẫn của nhà sản xuất. Sắp xếp hành lý cân bằng, mang giấy tờ cần thiết và nghỉ giữa chặng. Không cố chạy khi mệt hoặc thời tiết xấu."
+            },
+            new BaiViet
+            {
+                TieuDe = "ABS, CBS và phanh thường: hiểu nhanh trước khi chọn xe",
+                TomTat = "Giải thích ngắn gọn các hệ thống phanh phổ biến và cách chúng hỗ trợ người lái.",
+                Loai = "KienThuc",
+                DaXuatBan = true,
+                NoiDung = "ABS giúp hạn chế khóa bánh khi phanh gấp trong điều kiện phù hợp; CBS phân bổ lực phanh giữa hai bánh theo thiết kế của xe. Mỗi hệ thống có giới hạn riêng và không thay thế việc giữ khoảng cách, giảm tốc độ phù hợp hay bảo dưỡng định kỳ. Hãy đọc sách hướng dẫn đúng mẫu xe."
+            },
             new BaiViet { TieuDe = "Chăm sóc xe sau mùa mưa", TomTat = "Làm sạch, kiểm tra và bảo quản các chi tiết thường tiếp xúc với nước mưa.", Loai = "BaoDuong", DaXuatBan = true, NoiDung = "Rửa sạch bùn đất bằng nước và dung dịch phù hợp, lau khô các đầu nối dễ đọng nước, kiểm tra phanh và lốp. Bôi trơn xích theo khuyến nghị cho xe có truyền động xích. Nếu phát hiện tiếng động, rung hoặc đèn cảnh báo bất thường, hãy đưa xe đến kỹ thuật viên." }
         };
         var articleTitles = await db.BaiViets.Select(x => x.TieuDe).ToListAsync();
