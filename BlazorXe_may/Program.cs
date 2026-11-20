@@ -8,23 +8,9 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.EventLog;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
-#if HAS_SHARED_ADMIN_STORE
-if (args.Contains("--create-admin", StringComparer.OrdinalIgnoreCase))
-{
-    var adminStore = new MyMvcApp.Services.SharedAdminStore(builder.Configuration);
-    Environment.ExitCode = await MyMvcApp.Services.AdminAccountCommand.RunAsync(adminStore);
-    return;
-}
-#else
-if (args.Contains("--create-admin", StringComparer.OrdinalIgnoreCase))
-{
-    Console.Error.WriteLine("The --create-admin command requires the shared MyMvcApp project source.");
-    Environment.ExitCode = 1;
-    return;
-}
-#endif
 if (OperatingSystem.IsWindows())
 {
     builder.Logging.AddFilter<EventLogLoggerProvider>(_ => false);
@@ -79,6 +65,13 @@ builder.Services.AddScoped<SoSanhXeService>();
 builder.Services.AddScoped<DichVuQuanTri>();
 
 var app = builder.Build();
+
+if (args.Contains("--create-admin", StringComparer.OrdinalIgnoreCase))
+{
+    Environment.ExitCode = await CreateAdminAsync(app.Services);
+    await app.DisposeAsync();
+    return;
+}
 
 if (!app.Environment.IsDevelopment())
 {
@@ -226,4 +219,116 @@ static string GetLocalReturnUrl(string? candidate, string fallback)
         && !candidate.StartsWith("/\\")
         ? candidate
         : fallback;
+}
+
+static async Task<int> CreateAdminAsync(IServiceProvider services)
+{
+    try
+    {
+        await using var scope = services.CreateAsyncScope();
+        var scopedServices = scope.ServiceProvider;
+        await KhoiTaoDuLieu.KhoiTaoAsync(scopedServices);
+
+        var roleManager = scopedServices.GetRequiredService<RoleManager<IdentityRole<int>>>();
+        const string adminRoleName = "QuanTriVien";
+        if (!await roleManager.RoleExistsAsync(adminRoleName))
+        {
+            var roleResult = await roleManager.CreateAsync(new IdentityRole<int>(adminRoleName));
+            if (!roleResult.Succeeded)
+            {
+                Console.Error.WriteLine(string.Join(Environment.NewLine, roleResult.Errors.Select(error => error.Description)));
+                return 1;
+            }
+        }
+
+        Console.Write("Email admin: ");
+        var email = Console.ReadLine()?.Trim();
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            Console.Error.WriteLine("Email không được để trống.");
+            return 1;
+        }
+
+        var userManager = scopedServices.GetRequiredService<UserManager<AppUser>>();
+        if (await userManager.FindByEmailAsync(email) is not null)
+        {
+            Console.Error.WriteLine("Email này đã có tài khoản. Lệnh không tự đổi tài khoản hiện có thành admin.");
+            return 1;
+        }
+
+        Console.Write("Họ tên admin: ");
+        var fullName = Console.ReadLine()?.Trim();
+        if (string.IsNullOrWhiteSpace(fullName))
+        {
+            Console.Error.WriteLine("Họ tên không được để trống.");
+            return 1;
+        }
+
+        var password = ReadConsolePassword("Mật khẩu admin: ");
+        var confirmPassword = ReadConsolePassword("Nhập lại mật khẩu: ");
+        if (password != confirmPassword)
+        {
+            Console.Error.WriteLine("Hai mật khẩu không khớp.");
+            return 1;
+        }
+
+        var user = new AppUser
+        {
+            UserName = email,
+            Email = email,
+            HoTen = fullName,
+            EmailConfirmed = true
+        };
+        var createResult = await userManager.CreateAsync(user, password);
+        if (!createResult.Succeeded)
+        {
+            Console.Error.WriteLine(string.Join(Environment.NewLine, createResult.Errors.Select(error => error.Description)));
+            return 1;
+        }
+
+        var assignRoleResult = await userManager.AddToRoleAsync(user, adminRoleName);
+        if (!assignRoleResult.Succeeded)
+        {
+            Console.Error.WriteLine("Đã tạo tài khoản nhưng chưa gán được vai trò admin:");
+            Console.Error.WriteLine(string.Join(Environment.NewLine, assignRoleResult.Errors.Select(error => error.Description)));
+            return 1;
+        }
+
+        Console.WriteLine($"Đã tạo tài khoản admin: {email}");
+        return 0;
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"Không tạo được tài khoản admin: {exception.Message}");
+        return 1;
+    }
+}
+
+static string ReadConsolePassword(string prompt)
+{
+    Console.Write(prompt);
+    var password = new StringBuilder();
+    while (true)
+    {
+        var key = Console.ReadKey(intercept: true);
+        if (key.Key == ConsoleKey.Enter)
+        {
+            Console.WriteLine();
+            return password.ToString();
+        }
+
+        if (key.Key == ConsoleKey.Backspace)
+        {
+            if (password.Length > 0)
+            {
+                password.Length--;
+            }
+            continue;
+        }
+
+        if (!char.IsControl(key.KeyChar))
+        {
+            password.Append(key.KeyChar);
+        }
+    }
 }
