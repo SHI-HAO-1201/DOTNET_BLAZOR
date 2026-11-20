@@ -117,3 +117,118 @@ dotnet watch
 Lưu ý: `/danh-sach-xe` là route riêng cho `Features/XeMay/Pages/DanhSachXe.razor`, không phải trang bộ sưu tập storefront; các nút thêm/sửa/xóa ở đó hiện là TODO.
 | Đổi quyền checkbox | `CapNhatQuyenAsync` | component → `DichVuPhanQuyen` |
 
+## Luồng chi tiết: từ thao tác đến nơi dữ liệu đi
+
+Đọc mỗi luồng theo thứ tự **markup/nút → event hoặc HTTP endpoint → handler → service/Identity → `AppDbContext` hoặc trạng thái trong bộ nhớ → giao diện/route kế tiếp**. Tên file trong các chuỗi dưới đây tính từ thư mục `BlazorXe_may`.
+
+### 1. Đăng ký, đăng nhập và đăng xuất
+
+**Đăng ký khách hàng**
+
+```text
+Components/Pages/DangNhap.razor
+  form action="/auth/register" method="post"
+  + input fullName, email, password
+  → wwwroot/auth.js bắt sự kiện submit
+  → GET /auth/csrf để xin request token và cookie antiforgery
+  → gắn token vào form rồi POST /auth/register
+  → endpoint MapPost("/auth/register") trong Program.cs
+  → UserManager<AppUser>.CreateAsync(user, password)
+  → UserManager<AppUser>.AddToRoleAsync(user, "User")
+  → SignInManager<AppUser>.SignInAsync(...)
+  → chuyển về /
+```
+
+`CreateAsync` tạo người dùng trong các bảng Identity (`AspNetUsers` và các bảng liên quan); mật khẩu được Identity băm trước khi lưu. Tài khoản đăng ký nhận vai trò `User`, không phải `QuanTriVien`. Nếu tạo user được nhưng gán role thất bại, endpoint xóa user vừa tạo rồi trả lỗi. Password policy được cấu hình trong `Program.cs`: tối thiểu 10 ký tự, có số, chữ thường, chữ hoa và ký tự đặc biệt.
+
+**Đăng nhập** đi theo `DangNhap.razor` → `auth.js`/`GET /auth/csrf` → `POST /auth/login` trong `Program.cs` → `UserManager.FindByEmailAsync` → kiểm tra `DangHoatDong` → `SignInManager.PasswordSignInAsync` → tạo cookie đăng nhập. Nếu URL có `returnUrl`, endpoint chỉ chuyển tới URL nội bộ hợp lệ; nếu không, nhân viên được chuyển tới `/admin/dashboard`, khách hàng về `/`.
+
+**Đăng xuất**: form `/auth/logout` nằm ở `UserLayout.razor` và `AdminLayout.razor` → `auth.js` lấy token chống giả mạo → `MapPost("/auth/logout")` trong `Program.cs` → `SignInManager.SignOutAsync()` xóa phiên đăng nhập → chuyển về `/`.
+
+Các nút hiện/ẩn mật khẩu trong `DangNhap.razor` chỉ đổi biến `ShowLoginPassword`/`ShowRegisterPassword` để đổi `type` input; chúng không gửi request và không ghi dữ liệu.
+
+### 2. Mở route và chọn layout
+
+```text
+URL người dùng mở
+  → Components/Routes.razor (Router)
+  → component có @page khớp URL
+  → layout được áp dụng (UserLayout hoặc AdminLayout)
+  → component tải dữ liệu trong OnInitializedAsync/OnParametersSetAsync
+```
+
+Các link trong layout chỉ điều hướng. Phần nghiệp vụ thường nằm trong component của route; bấm nút `@onclick` thì Blazor gọi handler ngay trong file `.razor` đó, rồi handler mới gọi service hoặc database. Ví dụ `/admin/san-pham` vẫn là `AdminPanel.razor`; giá trị `{Module}` chọn tab, không làm Router mở một component admin khác.
+
+### 3. Trang danh sách, tìm và xem chi tiết xe
+
+**Tìm từ thanh header**: input `tuKhoa` và form GET ở `Components/Layout/UserLayout.razor` → trình duyệt mở `/san-pham?tuKhoa=...` → route `/san-pham` trong `Components/Pages/Trangchu.razor` → `[SupplyParameterFromQuery]` nhận từ khóa → `OnParametersSetAsync()` → `XeMayService.LayDanhSachXeAsync(...)` (`Features/XeMay/Service/XeMayService.cs`) → truy vấn `AppDbContext.XeMays`/dữ liệu tồn kho → trả danh sách cho `Trangchu.razor` render.
+
+Form lọc/sắp xếp trên chính trang `/san-pham` cũng GET về route này với các query parameter. Submit không có handler `@onclick` riêng; thay đổi query khiến component nhận parameter mới và tải lại danh sách qua cùng service.
+
+**Mở xe**: link ảnh/tên xe trong `Trangchu.razor` → `/xe/{id}` → `Features/XeMay/Pages/ChiTietXe.razor` → `OnParametersSetAsync()` đọc `Id` → `XeMayService.LayTheoIdAsync(id)` → `AppDbContext.XeMays` → render thông tin xe. Không tìm thấy id thì component hiển thị trạng thái không có xe.
+
+### 4. Giỏ hàng, so sánh và yêu thích
+
+- **Thêm vào giỏ từ trang chủ**: `Trangchu.razor` → `ThemGioHang(id)` → `GioHangService.Them(id)` trong `Features/DonHang/GioHangService.cs`.
+- **Thêm vào giỏ từ chi tiết**: `ChiTietXe.razor` → `ThemVaoGio()` → cùng `GioHangService.Them(id)`.
+- **Mua ngay**: `ChiTietXe.razor` → handler thêm xe vào `GioHangService` → điều hướng `/gio-hang`; thao tác mua ngay chưa tạo đơn ở bước này.
+- **Giỏ hàng hiển thị**: `GioHang.razor` đăng ký sự kiện `GioHangService.Changed` → đọc cặp `xeId/số lượng` trong service → lần lượt gọi `XeMayService.LayTheoIdAsync` để lấy tên/giá/tình trạng xe → render dòng giỏ. `CapNhat` đổi số lượng, `Xoa` bỏ xe; service phát `Changed` để component tải lại. Giỏ hiện được giữ trong bộ nhớ của scope Blazor, không phải bảng database.
+- **So sánh**: `ChiTietXe.razor` → `ThemSoSanh` → `SoSanhXeService.Them(id)` (cùng file `GioHangService.cs`) → điều hướng `/so-sanh` → `SoSanhXe.razor` lấy các id và tải thông tin qua `XeMayService`. Danh sách so sánh cũng giữ trong bộ nhớ, giới hạn tối đa 4 xe.
+- **Yêu thích**: `ChiTietXe.razor` → `ThemYeuThichAsync` → lấy user đang đăng nhập qua `AuthenticationStateProvider`/`UserManager` → thêm hoặc cập nhật bản ghi `XeYeuThich` trong `AppDbContext` → `YeuThich.razor` tải các xe đã lưu. Nút bỏ yêu thích ở trang `/yeu-thich` gọi `XoaAsync(id)` và xóa bản ghi tương ứng.
+- **Đánh giá xe**: `EditForm` trong `ChiTietXe.razor` → `GuiDanhGiaAsync` khi form hợp lệ → tạo `DanhGiaXe` trong `AppDbContext` → tải/render lại danh sách đánh giá.
+
+### 5. Đặt hàng và theo dõi đơn
+
+```text
+UserLayout/GioHang.razor
+  → link /thanh-toan
+  → Features/DonHang/Pages/ThanhToan.razor
+  → OnInitializedAsync tải chi nhánh và user hiện tại
+  → EditForm OnValidSubmit="DatHangAsync"
+  → Features/DonHang/DichVuDonHang.DatHangAsync(...)
+  → kiểm tra giỏ, xe, tồn kho, người nhận/chi nhánh/khuyến mãi
+  → transaction ghi DonHangs + ChiTietDonHangs + GiaoDichThanhToans
+    và cập nhật XeMays/TonKhoChiNhanhs/BienDongKhos
+  → trả đơn cho component, xóa GioHangService, hiển thị mã đơn
+```
+
+Nếu người dùng chưa đăng nhập, `ThanhToan.razor` điều hướng tới `/dang-nhap?returnUrl=%2Fthanh-toan`; sau đăng nhập endpoint đưa người dùng trở lại checkout. Nút áp dụng mã gọi riêng `ApDungMaKhuyenMaiAsync()` → `DichVuDonHang.KiemTraMaKhuyenMaiAsync()` để kiểm tra trước; khi tạo đơn, service kiểm tra lại để không dựa vào kết quả cũ từ trình duyệt.
+
+**Xem đơn của tôi**: link `/don-hang` → `DonHangCuaToi.razor` → lấy user hiện tại → `DichVuDonHang.LayDonHangCuaNguoiDungAsync(userId)` → truy vấn `DonHangs` kèm chi tiết. **Yêu cầu hủy**: nút gọi `HuyDonAsync(id)` → `DichVuDonHang.HuyDonAsync(id, userId, staff: false)` → chỉ cho hủy đơn đang chờ xác nhận → transaction cập nhật trạng thái và hoàn lại số lượng tồn.
+
+### 6. Hồ sơ và yêu cầu hỗ trợ
+
+- **Hồ sơ/mật khẩu/địa chỉ**: route `/tai-khoan` → `TaiKhoanCuaToi.razor` lấy user trong `OnInitializedAsync`. Form hồ sơ gọi `LuuHoSoAsync` → `UserManager.UpdateAsync`; form đổi mật khẩu gọi `DoiMatKhauAsync` → `UserManager.ChangePasswordAsync`; thêm/xóa địa chỉ gọi `ThemDiaChiAsync`/`XoaDiaChiAsync` → `DichVuKhachHang` hoặc `AppDbContext` → render kết quả tại cùng trang.
+- **Hỗ trợ**: route `/ho-tro` → `Features/KhachHang/Pages/HoTro.razor` → form `OnValidSubmit="GuiYeuCauAsync"` → lưu `PhieuHoTro` trong `AppDbContext` (gắn user nếu đã đăng nhập).
+- **Bảo hành**: route `/bao-hanh` → `BaoHanhCuaToi.razor` → `GuiYeuCauAsync` → `DichVuKhachHang.GuiYeuCauBaoHanhAsync` → lưu `YeuCauBaoHanh`; danh sách yêu cầu được tải theo user hiện tại.
+- **Thông báo của tôi**: route `/thong-bao` → `ThongBaoCuaToi.razor` → truy vấn `ThongBaoNguoiDungs` theo user qua `AppDbContext`.
+- **Tin tức/khuyến mãi/showroom/bộ sưu tập**: link từ `UserLayout.razor` → route tương ứng (`TinTuc.razor`, `KhuyenMai.razor`, `CuaHang.razor`, `BoSuuTap.razor`). Đây là các trang đọc/render dữ liệu; link trên trang có thể dẫn tiếp về `/san-pham` hoặc `/xe/{id}`.
+
+### 7. Luồng trong trang quản trị
+
+`AdminLayout.razor` tạo link `/admin/{Module}` → Router chọn `AdminPanel.razor` → `OnParametersSetAsync()` đọc module và gọi tải dữ liệu → component kiểm tra role/quyền → handler được gọi khi submit form hoặc click. Nhiều thao tác đi qua `ThucHienAsync(requiredPermission, operation)`: hàm này xác minh quyền, chạy operation và đặt thông báo thành công/lỗi; phần đọc lại danh sách hoặc ghi nhật ký thường được gọi cụ thể bên trong operation/handler. Mỗi module vẫn là một vùng giao diện trong cùng `AdminPanel.razor`, không phải mỗi tab là một file/page riêng.
+
+| Thao tác trong `AdminPanel.razor` | Chuỗi gọi tiếp theo | Đích dữ liệu |
+|---|---|---|
+| Lưu/tạo xe | `EditForm` → `LuuXeAsync` → `XeMayService.ThemXeAsync` hoặc `CapNhatXeAsync` | `XeMays`; thêm/cập nhật tồn theo branch nếu cần |
+| Sửa xe trong bảng | click → `ChonXe(xe)` | Chỉ đổ dữ liệu vào `XeForm`; chưa ghi DB cho tới khi bấm Lưu |
+| Ẩn/mở bán | click → `NgungKinhDoanhAsync`/`MoKinhDoanhAsync` → `XeMayService` | Cập nhật trạng thái xe trong `XeMays` |
+| Điều chỉnh/chuyển kho | form → `CapNhatKhoAsync`/`ChuyenKhoAsync` → `XeMayService` | `TonKhoChiNhanhs`, ghi lịch sử `BienDongKhos` |
+| Tạo đơn tại quầy | form → `TaoDonTaiQuayAsync` | Tạo `DonHangs`, `ChiTietDonHangs`, thanh toán; cập nhật tồn trong `AppDbContext` |
+| Khóa/mở user | click → `DoiTrangThaiNguoiDungAsync` | `UserManager` cập nhật `AppUser.DangHoatDong` |
+| Nhà cung cấp/khuyến mãi | form → `ThemNhaCungCapAsync`/`LuuKhuyenMaiAsync`; xóa → `XoaKhuyenMaiAsync` | Các DbSet `NhaCungCaps`/`KhuyenMais` |
+| Cập nhật trạng thái đơn online | click → `CapNhatDonAsync` → `DichVuQuanTri.CapNhatTrangThaiDonHangAsync` | `DonHangs` qua service |
+| Hủy đơn nhân viên | click → `HuyDonNhanVienAsync` → `DichVuDonHang.HuyDonAsync(..., staff: true)` | Trạng thái đơn và hoàn tồn theo transaction |
+| Hoàn tất bảo hành/đóng hỗ trợ | click → `CapNhatBaoHanhAsync`/`CapNhatHoTroAsync` | `YeuCauBaoHanhs`/`PhieuHoTros` |
+| Bài viết đăng/ẩn | form hoặc click → `ThemBaiVietAsync`/`DoiTrangThaiBaiVietAsync` | `BaiViets` |
+| Gán role/phạm vi chi nhánh | click → `GanVaiTroAsync`/`GanChiNhanhAsync` → `DichVuQuanTri` hoặc `DichVuPhanQuyen` | Bảng Identity role và `PhamViNguoiDungs` |
+| Quyền checkbox | change → `CapNhatQuyenAsync` → `DichVuPhanQuyen` | `GanQuyenVaiTros` |
+| Chi nhánh/thông báo/cấu hình | form → `ThemChiNhanhAsync`/`GuiThongBaoAsync`/`LuuCauHinhAsync` | `ChiNhanhs`/`ThongBaoNguoiDungs`/`CauHinhCuaHangs` |
+
+### 8. Các nút không đi tới nghiệp vụ hoặc chưa hoàn tất
+
+- `Counter.razor` → `IncrementCount()` chỉ tăng biến đếm mẫu.
+- `ReconnectModal.razor` dùng cơ chế kết nối lại của Blazor; không gọi service nghiệp vụ.
+- `DanhSachXe.razor` có các handler `ThemXeMoi`, `SuaXe`, `XoaXe` dạng TODO/khung mẫu; không đi tới `XeMayService` và chưa ghi/xóa database. Không nhầm route này với storefront `/san-pham`.
+- Toggle menu, đóng menu, hiện/ẩn mật khẩu, chọn xe vào form, reset form là trạng thái UI cục bộ; chúng chỉ đi tới database nếu có handler lưu riêng được mô tả ở trên.
+
