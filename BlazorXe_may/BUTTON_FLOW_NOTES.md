@@ -198,3 +198,55 @@ Tên trang thường mô tả nơi người dùng đang đứng; markup của n�
 5. Sau khi ghi dữ liệu, kiểm tra handler có tải lại dữ liệu/thông báo kết quả và component liên quan có đăng ký/hủy event `Changed` phù hợp.
 6. Nếu thật sự cần API HTTP mới, tạo endpoint ở `Program.cs` hoặc một lớp endpoint phù hợp, xác thực/ủy quyền và antiforgery theo kiểu request; chỉ dùng `HttpClient` khi gọi dịch vụ HTTP độc lập. Còn luồng Blazor Server nội bộ hiện tại thường gọi service trực tiếp.
 
+
+## Bản đồ nút trên website: địa chỉ file cụ thể
+
+Các đường dẫn dưới đây tính từ project `BlazorXe_may`. Gốc đầy đủ là:
+
+`D:\Hào Lê code\DOTNET\BLAZOR\DOTNET_BLAZOR\BlazorXe_may\`
+
+Ví dụ `Features\DonHang\Pages\GioHang.razor` tương ứng địa chỉ đầy đủ:
+`D:\Hào Lê code\DOTNET\BLAZOR\DOTNET_BLAZOR\BlazorXe_may\Features\DonHang\Pages\GioHang.razor`.
+
+| Nút/thao tác trên web | File chứa nút (địa chỉ dưới gốc project) | Handler và nơi tiếp theo |
+|---|---|---|
+| Menu trang chủ, Bộ sưu tập, Ưu đãi, Tạp chí, Showroom, Liên hệ, Giỏ hàng, Đăng nhập, Hồ sơ, Đơn hàng, Yêu thích, Bảo hành, Thông báo | `Components\Layout\UserLayout.razor` | Link `href`/`NavLink` chỉ điều hướng route. Nút menu điện thoại gọi `ToggleMenu`; chọn link gọi `DongMenu`. Đăng xuất submit `/auth/logout` và được xử lý bởi endpoint trong `Program.cs`. |
+| Nút tìm kiếm trên thanh đầu trang | `Components\Layout\UserLayout.razor` | Form GET tới `/san-pham?tuKhoa=...` → `Components\Pages\Trangchu.razor` nhận query → `XeMayService.LayDanhSachXeAsync`. |
+| Nút Tìm xe, bộ lọc hãng/loại và sắp xếp | `Components\Pages\Trangchu.razor` | Submit GET về `/san-pham` → cùng component tải lại danh sách theo query. Đây không phải nút ghi SQL. |
+| Nút Thêm vào giỏ ở thẻ xe trang chủ | `Components\Pages\Trangchu.razor` (markup nút khoảng dòng 169) | `ThemGioHang(xe.Id)` trong cùng file → `GioHangService.Them(id)` tại `Features\DonHang\GioHangService.cs`. Giỏ nằm trong state của service, chưa tạo đơn/ghi bảng đơn hàng. |
+| Link xem xe từ ảnh/tên/thẻ xe trang chủ | `Components\Pages\Trangchu.razor` | Điều hướng `/xe/{id}` → `Features\XeMay\Pages\ChiTietXe.razor` → `XeMayService.LayTheoIdAsync(id)`. |
+| Nút Mua ngay | `Features\XeMay\Pages\ChiTietXe.razor` | `MuaNgay` trong cùng file thêm xe vào `GioHangService`, sau đó điều hướng `/gio-hang`; chưa tạo đơn. |
+| Nút Thêm vào giỏ ở trang chi tiết | `Features\XeMay\Pages\ChiTietXe.razor` | `ThemVaoGio` trong cùng file → `GioHangService.Them(id)` tại `Features\DonHang\GioHangService.cs`. |
+| Nút So sánh xe | `Features\XeMay\Pages\ChiTietXe.razor` | `ThemSoSanh` → `SoSanhXeService` (cùng file `Features\DonHang\GioHangService.cs`) → điều hướng `/so-sanh`. |
+| Nút Thêm vào danh sách yêu thích | `Features\XeMay\Pages\ChiTietXe.razor` | `ThemYeuThichAsync` trong cùng file → `AppDbContext` lưu yêu thích của tài khoản đã đăng nhập. Nếu chưa đăng nhập, link đăng nhập cũng nằm trong file này. |
+| Nút Gửi đánh giá | `Features\XeMay\Pages\ChiTietXe.razor` | `EditForm OnValidSubmit="GuiDanhGiaAsync"` → handler cùng file → lưu đánh giá qua `AppDbContext`. |
+| Nút Thêm xe mới/Sửa/Xóa ở route `/danh-sach-xe` | `Features\XeMay\Pages\DanhSachXe.razor` | Các nút gọi `ThemXeMoi`, `SuaXe`, `XoaXe` trong cùng file nhưng hiện các method chỉ là placeholder, chưa mở form và chưa thêm/sửa/xóa trong SQL. Chức năng quản trị xe đang nối thật nằm ở `/admin/san-pham` trong `Features\Admin\Pages\AdminPanel.razor`. |
+| Nút Xóa xe khỏi giỏ | `Features\DonHang\Pages\GioHang.razor` | `Xoa(id)` → `GioHangService` cập nhật state và phát `Changed`; component render lại. |
+| Nút Tiến hành đặt hàng / Đăng nhập để đặt hàng | `Features\DonHang\Pages\GioHang.razor` | Điều hướng `/thanh-toan`; nếu chưa đăng nhập thì `/dang-nhap?returnUrl=%2Fthanh-toan`. |
+| Nút Áp dụng mã ưu đãi | `Features\DonHang\Pages\ThanhToan.razor` | `ApDungMaKhuyenMaiAsync` → `DichVuDonHang.KiemTraMaKhuyenMaiAsync`; chỉ kiểm tra mã trước checkout, lúc tạo đơn service kiểm tra lại. |
+| Nút Gửi đơn/Đặt hàng | `Features\DonHang\Pages\ThanhToan.razor` | `EditForm OnValidSubmit="DatHangAsync"` → `DichVuDonHang.DatHangAsync` trong `Features\DonHang\DichVuDonHang.cs` → transaction lưu đơn/chi tiết/thanh toán và cập nhật kho trong SQL. |
+| Nút Hủy đơn ở Đơn hàng của tôi | `Features\DonHang\Pages\DonHangCuaToi.razor` | `HuyDonAsync(id)` → `DichVuDonHang.HuyDonAsync(..., staff: false)` → kiểm tra quyền/trạng thái, cập nhật đơn và hoàn kho. |
+| Nút Bỏ xe yêu thích | `Features\XeMay\Pages\YeuThich.razor` | `XoaAsync(id)` trong cùng file → xóa bản ghi yêu thích qua `AppDbContext`. |
+| Nút Bỏ xe khỏi danh sách so sánh | `Features\XeMay\Pages\SoSanhXe.razor` | `Xoa(id)` cập nhật state `SoSanhXeService`; không xóa dữ liệu SQL. |
+| Nút Gửi yêu cầu liên hệ/hỗ trợ | `Features\KhachHang\Pages\HoTro.razor` | `EditForm OnValidSubmit="GuiYeuCauAsync"` → handler cùng file → lưu phiếu hỗ trợ trong `AppDbContext`. |
+| Nút Gửi yêu cầu bảo hành | `Features\KhachHang\Pages\BaoHanhCuaToi.razor` | `EditForm OnValidSubmit="GuiYeuCauAsync"` → `DichVuKhachHang.GuiYeuCauBaoHanhAsync` trong `Features\TaiKhoan\DichVuKhachHang.cs` → lưu yêu cầu bảo hành. |
+| Nút Đăng nhập/Đăng ký và hiện/ẩn mật khẩu | `Components\Pages\DangNhap.razor` | Login/Register submit tới `/auth/login` hoặc `/auth/register`; `wwwroot\auth.js` thêm antiforgery token; endpoint tương ứng nằm trong `Program.cs`. Nút con mắt chỉ đổi kiểu hiển thị mật khẩu. |
+| Nút Đóng form hồ sơ/xem thông tin, lưu hồ sơ, đổi mật khẩu, thêm/xóa địa chỉ | `Features\TaiKhoan\Pages\TaiKhoanCuaToi.razor` | Handler nằm trong component; thao tác tài khoản dùng Identity hoặc `DichVuKhachHang`/`AppDbContext`. |
+| Nút Thêm xe, Lưu xe, Làm mới, Sửa, Ẩn, Mở bán trong quản trị sản phẩm | `Features\Admin\Pages\AdminPanel.razor` | `LuuXeAsync` → `XeMayService.ThemXeAsync`/`CapNhatXeAsync`; nút bảng gọi `ChonXe`, `NgungKinhDoanhAsync`, `MoKinhDoanhAsync`. Các thao tác được kiểm tra quyền trong cùng component và ghi `XeMays`/tồn kho qua service. |
+| Nút Ghi nhận biến động kho, Chuyển kho | `Features\Admin\Pages\AdminPanel.razor` | Submit form → `CapNhatKhoAsync`/`ChuyenKhoAsync` → `XeMayService`; cập nhật tồn theo chi nhánh và lịch sử biến động kho. |
+| Nút Tạo đơn tại quầy | `Features\Admin\Pages\AdminPanel.razor` | Submit form → `TaoDonTaiQuayAsync` → tạo đơn/chi tiết/thanh toán và trừ kho qua `AppDbContext`. |
+| Nút Xem tài khoản, Khóa/Mở khóa khách hàng | `Features\Admin\Pages\AdminPanel.razor` | `XemKhachHangAsync`/`DoiTrangThaiNguoiDungAsync` → Identity `UserManager`. |
+| Nút Lưu/Sửa/Hủy sửa/Xóa khuyến mãi | `Features\Admin\Pages\AdminPanel.razor` | `LuuKhuyenMaiAsync`, `SuaKhuyenMai`, `DatLaiKhuyenMai`, `XoaKhuyenMaiAsync` → DbSet khuyến mãi. |
+| Nút Đóng yêu cầu hỗ trợ, Đánh dấu hoàn tất bảo hành | `Features\Admin\Pages\AdminPanel.razor` | `CapNhatHoTroAsync`/`CapNhatBaoHanhAsync` → cập nhật phiếu hỗ trợ/yêu cầu bảo hành trong SQL. |
+| Nút Lưu bài viết, Đăng/Ẩn bài viết | `Features\Admin\Pages\AdminPanel.razor` | `ThemBaiVietAsync`/`DoiTrangThaiBaiVietAsync` → lưu hoặc đổi trạng thái bài viết. |
+| Nút Gán/Thu hồi vai trò, Gán/Thu hồi phạm vi chi nhánh | `Features\Admin\Pages\AdminPanel.razor` | `GanVaiTroAsync`/`GanChiNhanhAsync` → `DichVuQuanTri` hoặc `DichVuPhanQuyen`, cập nhật role/phạm vi người dùng. |
+| Nút Lưu chi nhánh, Gửi thông báo, Lưu cấu hình, Sửa cấu hình | `Features\Admin\Pages\AdminPanel.razor` | `ThemChiNhanhAsync`/`GuiThongBaoAsync`/`LuuCauHinhAsync`/`ChonCauHinh` → các DbSet chi nhánh/thông báo/cấu hình. |
+| Nút lưu trạng thái đơn và Hủy đơn của nhân viên | `Features\Admin\Pages\AdminPanel.razor` | `CapNhatDonAsync` → `DichVuQuanTri`; `HuyDonNhanVienAsync` → `DichVuDonHang.HuyDonAsync(..., staff: true)`. |
+| Nút Mở bản đồ, gọi điện, mở link báo chí/Red Dot | `Features\KhachHang\Pages\CuaHang.razor` và `Features\KhachHang\Pages\BoSuuTap.razor` | Đây là link ngoài/trình gọi điện, không gọi service lưu dữ liệu của app. |
+
+### Cách đọc địa chỉ khi tìm trong IDE
+
+- Từ solution Explorer mở đúng file theo đường dẫn ở cột giữa; tên thư mục `Features` là nhóm chức năng, `Pages` chứa component có route.
+- Nếu chỉ muốn tìm chỗ đặt nút: mở file `.razor` ghi trong bảng và tìm tên nút hoặc `@onclick`/`OnValidSubmit`.
+- Nếu muốn tìm chỗ xử lý: bấm tên method ở cùng file; sau đó lần tiếp lời gọi `XeMayService`, `GioHangService`, `DichVuDonHang`, `DichVuKhachHang` hoặc `DichVuQuanTri`.
+- `Features\XeMay\Pages\DanhSachXe.razor` là trang CRUD mẫu còn dang dở; đừng nhầm nó với nút quản trị sản phẩm đang hoạt động trong `Features\Admin\Pages\AdminPanel.razor`.
